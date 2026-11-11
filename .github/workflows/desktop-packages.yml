@@ -1,0 +1,55 @@
+name: Three-platform packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'CrossPlatform/**'
+      - 'PerfTicker/**'
+      - 'remote/**'
+      - 'tests/**'
+      - 'packaging/**'
+      - 'tools/package_desktop.py'
+      - 'docs/PLATFORMS.md'
+      - '.github/workflows/desktop-packages.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.family }} (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { family: Windows, os: windows-latest, rid: win-x64, project: PerfTicker/PerfTicker.csproj }
+          - { family: Linux, os: ubuntu-24.04, rid: linux-x64, project: CrossPlatform/PerfTicker.Desktop.csproj }
+          - { family: Linux, os: ubuntu-24.04-arm, rid: linux-arm64, project: CrossPlatform/PerfTicker.Desktop.csproj }
+          - { family: macOS, os: macos-15-intel, rid: osx-x64, project: CrossPlatform/PerfTicker.Desktop.csproj }
+          - { family: macOS, os: macos-15, rid: osx-arm64, project: CrossPlatform/PerfTicker.Desktop.csproj }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fixture checks (no GUI, hardware sampling or SSH)
+        run: dotnet run --project tests/PerfTicker.Desktop.Tests -c Release
+      - name: Publish without starting the application
+        run: dotnet publish ${{ matrix.project }} -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/publish
+      - name: Package source and licenses
+        run: python tools/package_desktop.py --rid ${{ matrix.rid }} --input artifacts/publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PerfTicker-${{ matrix.family }}-${{ matrix.rid }}
+          path: |
+            dist/packages/${{ matrix.family }}/*.zip
+            dist/packages/${{ matrix.family }}/*.tar.gz
+            dist/packages/${{ matrix.family }}/*.sha256
+          retention-days: 30

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>PerfTickerDesktop</AssemblyName>
+    <RootNamespace>PerfTicker</RootNamespace>
+    <Version>1.7.0</Version>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+    <Compile Include="../PerfTicker/Snapshot.cs;../PerfTicker/Metrics.cs;../PerfTicker/RemoteSampler.cs;../PerfTicker/SshConnection.cs;../PerfTicker/SshDiscovery.cs;../PerfTicker/Diag.cs" LinkBase="Shared" />
+    <EmbeddedResource Include="../remote/collector.py" LogicalName="PerfTicker.collector.py" />
+    <InternalsVisibleTo Include="PerfTicker.Desktop.Tests" />
+  </ItemGroup>
+</Project>

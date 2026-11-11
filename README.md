@@ -1,4 +1,10 @@
-# PerfTicker Remote · 本机与多显卡服务器行情
+# PerfTicker Remote · Windows / Linux / macOS 三个版本
+
+**1.7 新增 Linux 与 macOS 独立桌面版**，Windows 保留原生客户端。三端提供行情界面、K 线、多 GPU、SSH 配置发现/手动 IP，以及本机 / 服务器选择。Mac 支持 Apple Silicon 与 Intel，Linux 提供 x64 与 ARM64 包。
+
+下载、各平台启动方式、Mac 传感器限制与虚拟机验收步骤见 **[三平台使用说明](docs/PLATFORMS.md)**。安装包在 [GitHub Actions 构建附件](https://github.com/zangly55/PerfTicker-Remote/actions/workflows/desktop-packages.yml)；构建不自动启动应用。当前 macOS/Linux 实际运行验收待设备就绪，不能把编译通过视作实机通过。
+
+以下为 Windows 版及共用 SSH 功能介绍：
 
 保留 PerfTicker 的股票行情、K 线、自选列表和桌面挂件，可选择监控当前 Windows 电脑，或通过 SSH 监控 Linux 算力机。
 

@@ -1,0 +1,4 @@
+# Preserve third-party license text verbatim, including its original whitespace.
+packaging/licenses/* -text -whitespace
+*.py text eol=lf
+*.yml text eol=lf
