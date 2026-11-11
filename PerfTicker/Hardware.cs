@@ -91,6 +91,32 @@ internal sealed class Hardware
         Wnet = 1.0;
     }
 
+    public void ProbeRemote(Snapshot s)
+    {
+        LogicalCores = Math.Max(1, s.CoreMHz.Length);
+        PhysicalCores = s.PhysicalCores;
+        CpuName = s.CpuName;
+        BaseMhz = s.CpuPeakMHz;
+        MaxMhz = s.CpuPeakMHz;
+        HasGpu = s.Gpu.Available;
+        GpuName = s.Gpu.Name;
+        GpuMemGB = double.IsFinite(s.Gpu.MemTotalMB) ? s.Gpu.MemTotalMB / 1024 : 0;
+        GpuMaxMhz = s.Gpu.MaxClockMHz;
+        GpuDriver = s.GpuDriver;
+        MemTotalGB = s.MemTotalGB;
+        FixedDisks = s.FixedDisks;
+        NetMaxGbps = s.NetMaxGbps;
+        OsName = s.OsName;
+        OsBuild = s.OsBuild;
+        Arch = s.Arch;
+        DotNet = "SSH 远程采集";
+        Wcpu = Clamp(LogicalCores / 16.0, 0.30, 4.0);
+        Wgpu = HasGpu ? Clamp(Math.Max(GpuMemGB, 2) / 8.0, 0.30, 4.0) : 0.25;
+        Wmem = Clamp(MemTotalGB / 32.0, 0.30, 4.0);
+        Wdisk = Clamp(Math.Max(1, FixedDisks) / 2.0, 0.50, 2.0);
+        Wnet = 1.0;
+    }
+
     private static double ReadRegistryMhz()
     {
         try

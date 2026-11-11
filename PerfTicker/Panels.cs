@@ -133,7 +133,7 @@ internal sealed class TitleBarPanel : Panel
         }
 
         Theme.Text(g, "性能行情终端", Theme.BrandFont, Theme.TextHi, Rc(46, 5, 200, 19), Theme.AL);
-        Theme.Text(g, "PERF · TERMINAL", Theme.BrandSub, Theme.GoldDim, Rc(47, 22, 200, 14), Theme.AL);
+        Theme.Text(g, St.Snap.HostName.Length > 0 ? "REMOTE · " + St.Snap.HostName : "PERF · REMOTE", Theme.BrandSub, Theme.GoldDim, Rc(47, 22, 200, 14), Theme.AL);
         // 设置齿轮
         bool setOn = F.SettingsOpen;
         if (setOn || _hover == 7) Theme.RoundedFill(g, Gear, 4f, setOn ? Color.FromArgb(46, Theme.Gold) : Theme.RowHover);
@@ -153,7 +153,7 @@ internal sealed class TitleBarPanel : Panel
         Theme.VLine(g, P(190), P(11), P(h - 11), Theme.Line2);
 
         // ── 状态胶囊 ──
-        bool live = !St.Paused;
+        bool live = !St.Paused && F.RemoteLive;
         var dotC = live ? Theme.Down : Theme.Warn;
         Theme.RoundedRect(g, Pill, (Pill.Height) / 2f / Theme.S, Color.FromArgb(24, dotC), Color.FromArgb(80, dotC), 1f);
         double pulse = (Math.Sin(St.Frame * 3.2) + 1) / 2;
@@ -166,7 +166,7 @@ internal sealed class TitleBarPanel : Panel
             g.FillEllipse(halo, dotX - P(3), dotY - P(3), dotR + P(6), dotR + P(6));
         }
         using (var b = new SolidBrush(dotC)) g.FillEllipse(b, dotX, dotY, dotR, dotR);
-        string pillTxt = live ? $"实时采样 {St.IntervalMs / 1000.0:0.0}s" : "行情已暂停";
+        string pillTxt = St.Paused ? "行情已暂停" : live ? $"远程行情 {St.IntervalMs / 1000.0:0.0}s" : F.RemoteStatus;
         Theme.Text(g, pillTxt, Theme.UiXS, live ? Color.FromArgb(0x7E, 0xE0, 0xC0) : Theme.Warn,
             new Rectangle(dotX + P(10), Pill.Y, Pill.Width - P(20), Pill.Height), Theme.AL);
 
@@ -661,8 +661,8 @@ internal sealed class InstrumentPanel : Panel
         Theme.Text(g, m.Unit, Theme.UiS, Theme.TextDim, new Rectangle(P(20) + bw2, P(46), P(60), P(18)), Theme.AL);
 
         string sign = m.ShownChg >= 0 ? "+" : "-";
-        string chgTxt = sign + m.Fmt(Math.Abs(m.ShownChg)) + (m.Unit == "%" ? "pt" : "");
-        string pctTxt = sign + Math.Abs(m.ChgPct).ToString("0.00") + "%";
+        string chgTxt = m.Available ? sign + m.Fmt(Math.Abs(m.ShownChg)) + (m.Unit == "%" ? "pt" : "") : "—";
+        string pctTxt = m.Available ? sign + Math.Abs(m.ChgPct).ToString("0.00") + "%" : "—";
         int cx2 = P(20) + bw2 + P(70);
         Theme.Text(g, chgTxt, Theme.NumS, col, new Rectangle(cx2, P(38), P(120), P(16)), Theme.AL);
         if (m.Unit != "%")
@@ -683,7 +683,7 @@ internal sealed class InstrumentPanel : Panel
         foreach (var (label, val) in stats)
         {
             Theme.Text(g, label, Theme.UiXS, Theme.TextFade, Rc(sx, 74, 34, 16), Theme.AL);
-            Theme.Text(g, val, Theme.NumXS, Theme.Txt, Rc(sx + 30, 74, 72, 16), Theme.AL);
+            Theme.Text(g, m.Count > 0 ? val : "—", Theme.NumXS, Theme.Txt, Rc(sx + 30, 74, 72, 16), Theme.AL);
             sx += 104;
         }
 

@@ -127,7 +127,7 @@ internal sealed class ChartPanel : Panel
         if (candles.Count == 0)
         {
             Watermark(g, m, w, h);
-            Theme.Text(g, "正在接收行情数据…", Theme.UiM, Theme.TextFade, new Rectangle(0, 0, Bounds.Width, Bounds.Height), Theme.AC);
+            Theme.Text(g, F.RemoteLive ? "该指标暂不可用" : F.RemoteStatus, Theme.UiM, Theme.TextFade, new Rectangle(0, 0, Bounds.Width, Bounds.Height), Theme.AC);
             End(g);
             return;
         }

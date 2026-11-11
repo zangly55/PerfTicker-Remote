@@ -16,9 +16,9 @@ internal sealed class BookPanel : Panel
         get
         {
             var m = St.Selected;
-            if (m.Group == "图形") return "GPU 持仓";
+            if (m.Group == "图形") return "GPU 显存持仓";
             if (m.Name.Contains("内存") || m.Name.Contains("提交")) return "内存持仓";
-            if (m.Name.Contains("磁盘")) return "磁盘持仓";
+            if (m.Name.Contains("磁盘")) return "CPU 持仓";
             return "CPU 持仓";
         }
     }
@@ -29,7 +29,7 @@ internal sealed class BookPanel : Panel
         var m = St.Selected;
         var procs = St.Procs;
         if (m.Group == "图形")
-            _rank.AddRange(procs.Where(p => p.GpuPct > 0.05).OrderByDescending(p => p.GpuPct).Take(RowCount));
+            _rank.AddRange(procs.Where(p => p.GpuMemMB > 0).OrderByDescending(p => p.GpuMemMB).Take(RowCount));
         else if (m.Name.Contains("内存") || m.Name.Contains("提交"))
             _rank.AddRange(procs.OrderByDescending(p => p.MemMB).Take(RowCount));
         else if (m.Name.Contains("磁盘"))
@@ -41,7 +41,7 @@ internal sealed class BookPanel : Panel
     private double ValOf(ProcSample p)
     {
         var m = St.Selected;
-        if (m.Group == "图形") return p.GpuPct;
+        if (m.Group == "图形") return p.GpuMemMB;
         if (m.Name.Contains("内存") || m.Name.Contains("提交")) return p.MemMB;
         return p.CpuPct;
     }
@@ -49,7 +49,7 @@ internal sealed class BookPanel : Panel
     private string FmtVal(ProcSample p)
     {
         var m = St.Selected;
-        if (m.Group == "图形") return p.GpuPct.ToString("0.0") + "%";
+        if (m.Group == "图形") return p.GpuMemMB >= 1024 ? (p.GpuMemMB / 1024).ToString("0.00") + "G" : p.GpuMemMB.ToString("0") + "M";
         if (m.Name.Contains("内存") || m.Name.Contains("提交")) return p.MemMB >= 1024 ? (p.MemMB / 1024).ToString("0.00") + "G" : p.MemMB.ToString("0") + "M";
         return p.CpuPct.ToString("0.0") + "%";
     }
@@ -123,7 +123,7 @@ internal sealed class BookPanel : Panel
         string dim = St.Selected.Group == "图形" ? "" : "%";
         string total = St.Selected.Group == "图形" || St.Selected.Name.Contains("内存") ? "" : "%";
         Theme.Text(g, "合计", Theme.UiXS, Theme.TextDim, new Rectangle(P(12), sumR.Y, P(40), sumR.Height), Theme.AL);
-        Theme.Text(g, sum.ToString("0.0") + total, Theme.NumXS, Theme.Gold, new Rectangle(P(46), sumR.Y, P(120), sumR.Height), Theme.AL);
+        Theme.Text(g, sum.ToString("0.0") + (St.Selected.Group == "图形" ? " MB" : total), Theme.NumXS, Theme.Gold, new Rectangle(P(46), sumR.Y, P(120), sumR.Height), Theme.AL);
         Theme.Text(g, $"{St.Procs.Count} 只", Theme.UiXS, Theme.TextFade, new Rectangle(Bounds.Width - P(70), sumR.Y, P(58), sumR.Height), Theme.AR);
         End(g);
     }
@@ -218,7 +218,7 @@ internal sealed class FooterPanel : Panel
             M("运行", $"{up0 / 3600:00}:{up0 % 3600 / 60:00}:{up0 % 60:00}");
             M("进程", s0.ProcCount.ToString());
             M("线程", s0.Threads.ToString());
-            M("句柄", s0.Handles >= 100000 ? (s0.Handles / 1024).ToString() + "K" : s0.Handles.ToString());
+            M("描述符", s0.Handles >= 100000 ? (s0.Handles / 1024).ToString() + "K" : s0.Handles.ToString());
             statEnd = x + P(12);
         }
 
@@ -278,7 +278,7 @@ internal sealed class FooterPanel : Panel
         Stat("运行", $"{up / 3600:00}:{up % 3600 / 60:00}:{up % 60:00}", Theme.Txt);
         Stat("进程", s.ProcCount.ToString(), Theme.Txt);
         Stat("线程", s.Threads.ToString(), Theme.Txt);
-        Stat("句柄", s.Handles >= 100000 ? (s.Handles / 1024).ToString() + "K" : s.Handles.ToString(), Theme.Txt);
+        Stat("描述符", s.Handles >= 100000 ? (s.Handles / 1024).ToString() + "K" : s.Handles.ToString(), Theme.Txt);
 
         Theme.VLine(g, statEnd, P(8), Hp - P(8), Theme.Line2);
 
@@ -335,7 +335,7 @@ internal sealed class FooterPanel : Panel
             var col = Theme.ChgColor(m.Chg);
             Add(m.Display, col);
             Add(" " + m.Unit + "  ", Theme.TextFade);
-            Add((m.ChgPct >= 0 ? "▲" : "▼") + Math.Abs(m.ChgPct).ToString("0.00") + "%", col);
+            Add(m.Available ? (m.ChgPct >= 0 ? "▲" : "▼") + Math.Abs(m.ChgPct).ToString("0.00") + "%" : "—", col);
             Add("   ｜   ", Color.FromArgb(0x3A, 0x44, 0x55));
         }
     }

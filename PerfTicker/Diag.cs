@@ -15,7 +15,7 @@ internal static class Diag
         {
             if (_dir != null) return _dir;
             _dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "PerfTicker", "logs");
+                "PerfTickerRemote", "logs");
             return _dir;
         }
     }

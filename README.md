@@ -1,4 +1,23 @@
-﻿# 性能行情终端 · PerfTicker
+# PerfTicker Remote · Linux 算力机远程行情
+
+保留 PerfTicker 的股票行情、K 线、自选列表和桌面挂件，在 Windows 电脑上通过 SSH 监控 Linux 算力机。
+
+此仓库是基于 [QiuSui1145/PerfTicker](https://github.com/QiuSui1145/PerfTicker) v1.5.0 的远程监控改造，沿用 GPL-3.0 许可，保留原作者 QiuSui / QiuSui_Studio 的署名。
+
+- 实时查看远端 CPU、GPU、显存、温度、功耗、磁盘和网络指标。
+- 进程表与主力持仓显示 NVIDIA 计算进程显存占用。
+- SSH 主机指纹校验、Windows 账户加密保存密码、自动重连与过期状态提示。
+- 只读采集；远端使用 Python 3 标准库和 `nvidia-smi`，无需安装常驻服务。
+
+**构建：** 安装 .NET 10 SDK 后运行 `dotnet publish PerfTicker/PerfTicker.csproj -c Release -o dist`，双击 `dist/PerfTickerRemote.exe`。
+
+**配置：** 打开左上角设置 → 远程算力机 → 连接，填写主机、SSH 端口、账号、密码和已核实的主机 SHA256 指纹。仓库不包含个人连接配置、密码或真实采样数据。
+
+完整说明见 [Linux 远程版使用指南](docs/REMOTE.md)。下方保留上游原版介绍；其中下载链接、Windows 本机采集和结束进程等描述针对上游原版，不代表本远程版。
+
+---
+
+# 上游原版：性能行情终端 · PerfTicker
 
 > 把 Windows 任务管理器做成**炒股软件行情终端**：CPU / GPU 的频率、占用率、显存、温度、功耗……
 > 每一项系统指标都是一只「个股」，实时 K 线、五档盘口、逐笔成交、自选行情一应俱全。

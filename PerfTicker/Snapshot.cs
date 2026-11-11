@@ -6,6 +6,7 @@ internal sealed class ProcSample
     public string Name = "";
     public double CpuPct;      // 单核百分比（100 = 占满一颗核心）
     public double GpuPct;      // GPU 引擎占用百分比
+    public double GpuMemMB = double.NaN; // NVIDIA compute process memory, unavailable => NaN
     public double MemMB;       // 工作集
     public int Threads;
     public int Handles;
@@ -33,6 +34,17 @@ internal sealed class GpuInfo
 
 internal sealed class Snapshot
 {
+    public int Protocol = 0;
+    public bool IsRemote = false;
+    public string HostName = "";
+    public string OsName = "";
+    public string OsBuild = "";
+    public string Arch = "";
+    public string GpuDriver = "";
+    public string SensorWarning = "";
+    public int PhysicalCores = 0;
+    public int FixedDisks = 1;
+    public double NetMaxGbps = 0;
     public long Tick;          // 单调递增的采样序号
     public double WallSeconds;
 

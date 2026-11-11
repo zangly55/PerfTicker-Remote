@@ -65,7 +65,8 @@ internal sealed class Metric
     }
 
     public double ShownChg => Shown - Open;
-    public string ShownText => Fmt(Shown);
+    public bool Available;
+    public string ShownText => Available ? Fmt(Shown) : "—";
 
     public double Chg => Value - Open;
     public double ChgPct => Math.Abs(Open) > 1e-9 ? (Value - Open) / Math.Abs(Open) * 100.0 : 0;
@@ -75,6 +76,7 @@ internal sealed class Metric
     /// <summary>涨跌额：百分比指标用「pt」，计数用整数，其余用自带单位。</summary>
     public string DeltaText(double d)
     {
+        if (!Available || !double.IsFinite(d)) return "—";
         string sign = d >= 0 ? "+" : "-";
         switch (Unit)
         {
@@ -92,16 +94,18 @@ internal sealed class Metric
 
     public string Fmt(double v)
     {
+        if (!double.IsFinite(v)) return "—";
         double a = Math.Abs(v);
         if (a >= 10000) return v.ToString("N0", CultureInfo.InvariantCulture);
         return v.ToString("F" + Decimals, CultureInfo.InvariantCulture);
     }
 
-    public string Display => Fmt(Value);
+    public string Display => Available ? Fmt(Value) : "—";
 
     public void Push(double v, long ms, double vol)
     {
-        if (double.IsNaN(v) || double.IsInfinity(v)) return;
+        Available = double.IsFinite(v);
+        if (!Available) return;
         Prev = Count == 0 ? v : Value;
         Value = v;
         if (Count == 0) { Open = v; High = v; Low = v; }
@@ -187,7 +191,7 @@ internal static class Catalog
         Add("600519", "GPU 核心频率", "图形", "MHz", 0, "显卡核心实时频率", s => s.Gpu.ClockMHz);
         Add("600520", "GPU 显存频率", "图形", "MHz", 0, "显存实时频率", s => s.Gpu.MemClockMHz);
         Add("600521", "GPU 负载", "图形", "%", 1, "显卡引擎占用率", s => s.Gpu.UtilPct);
-        Add("600522", "显存占用", "图形", "%", 1, "显存使用率", s => s.Gpu.MemTotalMB > 0 ? s.Gpu.MemUsedMB / s.Gpu.MemTotalMB * 100.0 : 0);
+        Add("600522", "显存占用", "图形", "%", 1, "显存使用率", s => s.Gpu.MemTotalMB > 0 ? s.Gpu.MemUsedMB / s.Gpu.MemTotalMB * 100.0 : double.NaN);
         Add("600523", "GPU 温度", "图形", "°C", 0, "显卡核心温度", s => s.Gpu.TempC);
         Add("600524", "GPU 功耗", "图形", "W", 1, "显卡实时功耗", s => s.Gpu.PowerW);
         Add("600525", "GPU 风扇", "图形", "%", 0, "显卡风扇转速百分比", s => s.Gpu.FanPct);

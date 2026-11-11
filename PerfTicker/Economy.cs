@@ -86,7 +86,8 @@ internal sealed class Economy
 
     public void Accrue(double dt, Snapshot s)
     {
-        if (!Enabled || dt <= 0) return;
+        if (!Enabled || dt <= 0 || !double.IsFinite(s.CpuPct) || !double.IsFinite(s.Gpu.UtilPct)
+            || !double.IsFinite(s.MemPct)) return;
         if (dt > 0.5) dt = 0.5;   // 防止长时间挂起后一次性灌入大量营收
 
         Seconds += dt;

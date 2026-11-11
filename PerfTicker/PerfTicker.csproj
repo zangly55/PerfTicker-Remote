@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <AssemblyName>PerfTicker</AssemblyName>
+    <AssemblyName>PerfTickerRemote</AssemblyName>
     <RootNamespace>PerfTicker</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
@@ -19,8 +19,8 @@
     <Product>性能行情终端</Product>
     <AssemblyTitle>PerfTicker · 性能行情终端</AssemblyTitle>
     <Company>PerfTicker</Company>
-    <Version>1.5.0</Version>
-    <FileVersion>1.5.0.0</FileVersion>
+    <Version>1.5.0-remote.1</Version>
+    <FileVersion>1.5.0.1</FileVersion>
     <Copyright>© 2026 PerfTicker</Copyright>
     <DebugType>none</DebugType>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -32,5 +32,11 @@
     <PublishTrimmed>false</PublishTrimmed>
     <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PerfTicker.Tests" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+    <EmbeddedResource Include="../remote/collector.py" LogicalName="PerfTicker.collector.py" />
+  </ItemGroup>
 
 </Project>

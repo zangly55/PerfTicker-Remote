@@ -23,16 +23,16 @@ internal sealed class Settings
     public int GadgetY { get; set; } = -1;
     public bool AutoStart { get; set; }
     public bool Marquee { get; set; } = true;
-    public int ThemeMode { get; set; } = 1;      // 0=深色 1=浅色 2=跟随系统
+    public int ThemeMode { get; set; } = 0;      // 0=深色 1=浅色 2=跟随系统
     public double EcoTotal { get; set; }
     public double EcoPeak { get; set; }
     public double EcoSeconds { get; set; }
     public string SelectedCode { get; set; } = "000002";
-    public int ProcSort { get; set; } = 1;
+    public int ProcSort { get; set; } = 0;
     public bool ProcSortDesc { get; set; } = true;
 
     private static string FilePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PerfTicker", "settings.json");
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PerfTickerRemote", "settings.json");
 
     /// <summary>读取配置；损坏时备份为 .bak-时间戳 并通过 warning 返回原因。</summary>
     public static Settings Load(out string warning)

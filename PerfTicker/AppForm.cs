@@ -8,7 +8,11 @@ internal sealed class AppForm : Form
     public AppState St = new();
     public readonly Hardware Hw = new();
 
-    private Sampler _sampler;
+    private RemoteSampler _sampler;
+    private string _lastRemoteStatus = "";
+    private Rectangle _setRemote;
+    public bool RemoteLive => _sampler?.IsLive == true;
+    public string RemoteStatus => _sampler?.Status ?? "等待远程连接";
     private readonly List<Panel> _panels = new();
     private TitleBarPanel _title;
     private IndexStripPanel _index;
@@ -122,7 +126,7 @@ internal sealed class AppForm : Form
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.BgDeep;
-        Text = "性能行情终端 · PerfTicker";
+        Text = "性能行情终端 · Linux 远程行情";
         KeyPreview = true;
         AutoScaleMode = AutoScaleMode.None;
         DoubleBuffered = true;
@@ -169,7 +173,7 @@ internal sealed class AppForm : Form
         St.ProcSortDesc = _settings.ProcSortDesc;
         St.ApplyColorMode();
 
-        _sampler = new Sampler { IntervalMs = St.IntervalMs };
+        _sampler = new RemoteSampler(St.IntervalMs);
         ApplyTheme();
         St.Marquee = _settings.Marquee;
         St.Economy.Restore(_settings.EcoTotal, _settings.EcoPeak, _settings.EcoSeconds);
@@ -307,7 +311,7 @@ internal sealed class AppForm : Form
 
     // ── 开机自启动 ─────────────────────────────────────────
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string RunName = "PerfTicker";
+    private const string RunName = "PerfTickerRemote";
 
     private static string ExePath => Environment.ProcessPath ?? Application.ExecutablePath;
 
@@ -350,6 +354,7 @@ internal sealed class AppForm : Form
             };
             var menu = new ContextMenuStrip { ShowImageMargin = false };
             menu.Items.Add("打开主窗口", null, (s, e) => RestoreFromTray());
+            menu.Items.Add("远程连接", null, (s, e) => ConfigureRemote());
             menu.Items.Add("营收归零", null, (s, e) => { St.Economy.Reset(); SaveSettings(); Invalidate(); });
             _trayGadget = new ToolStripMenuItem("桌面小挂件") { CheckOnClick = false, Checked = _settings.Gadget };
             _trayGadget.Click += (s, e) => ToggleGadget();
@@ -486,6 +491,28 @@ internal sealed class AppForm : Form
         Invalidate();
     }
 
+    public void ConfigureRemote()
+    {
+        using var dialog = new ConnectionForm { TopMost = TopMost };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        _sampler?.Dispose();
+        _sampler = new RemoteSampler(St.IntervalMs);
+        St.Snap = new Snapshot();
+        St.Metrics = Catalog.Build(1);
+        St.SelectedIndex = 1;
+        St.Procs.Clear();
+        St.ProcHist.Clear();
+        _prevCpu.Clear();
+        _prevPids.Clear();
+        _prevNames.Clear();
+        _hwProbed = _firstIngest = false;
+        _lastTick = -1;
+        St.Economy.Reset();
+        _settingsOpen = false;
+        AddTape("正在连接远程算力机", Theme.Blue);
+        Invalidate();
+    }
+
     public void ToggleMarquee()
     {
         St.Marquee = !St.Marquee;
@@ -594,7 +621,7 @@ internal sealed class AppForm : Form
         int w = Theme.Px(302);
         int x = Theme.Px(10);
         int y = _title.Bounds.Bottom + Theme.Px(6);
-        _setPanel = new Rectangle(x, y, w, Theme.Px(252));
+        _setPanel = new Rectangle(x, y, w, Theme.Px(290));
 
         var r = _setPanel;
         using (var sh = new SolidBrush(Color.FromArgb(70, 0, 0, 0)))
@@ -658,6 +685,11 @@ internal sealed class AppForm : Form
         Theme.Text(g, "打开", Theme.UiXS, _settingsHover == 6 ? Theme.Gold : Theme.TextDim, _setLog, Theme.AC);
         ry += Theme.Px(30);
 
+        Theme.Text(g, "远程算力机", Theme.UiM, Theme.Txt, new Rectangle(r.X + pad, ry, Theme.Px(140), Theme.Px(24)), Theme.AL);
+        _setRemote = new Rectangle(r.Right - pad - Theme.Px(64), ry, Theme.Px(64), Theme.Px(24));
+        Theme.RoundedRect(g, _setRemote, 3f, Theme.ChipBg, Theme.Line2, 1f);
+        Theme.Text(g, "连接", Theme.UiXS, Theme.Gold, _setRemote, Theme.AC);
+        ry += Theme.Px(36);
         Theme.Text(g, "设置会自动保存到本地配置", Theme.UiXS, Theme.TextFade, new Rectangle(r.X + pad, ry, Theme.Px(240), Theme.Px(18)), Theme.AL);
     }
 
@@ -677,6 +709,7 @@ internal sealed class AppForm : Form
 
     private bool SettingsClick(Point p)
     {
+        if (_setRemote.Contains(p)) { ConfigureRemote(); return true; }
         if (_setAuto.Contains(p)) { ToggleAutoStart(); return true; }
         if (_setMarquee.Contains(p)) { ToggleMarquee(); return true; }
         if (_setThemeDark.Contains(p)) { SetThemeMode(0); return true; }
@@ -737,7 +770,7 @@ internal sealed class AppForm : Form
         _menuItems.Clear();
         if (!confirm)
         {
-            _menuItems.Add(("全抛 · 结束进程", Theme.Up, () => BuildProcMenu(true)));
+            _menuItems.Add(("远程行情 · 只读监控", Theme.TextFade, CloseMenu));
             bool pinned = St.Pinned.Contains(_menuName);
             _menuItems.Add((pinned ? "取消置顶" : "置顶到榜首", Theme.Gold, () => { TogglePin(_menuName); CloseMenu(); }));
             _menuItems.Add(("复制进程名", Theme.Txt, () =>
@@ -763,23 +796,7 @@ internal sealed class AppForm : Form
 
     private void KillProc(int pid)
     {
-        string name = St.Procs.FirstOrDefault(p => p.Pid == pid)?.Name ?? pid.ToString();
-        if (pid == Environment.ProcessId)
-        {
-            AddTape("全抛被拒绝 · 不能结束行情终端自身", Theme.Warn);
-            Invalidate();
-            return;
-        }
-        try
-        {
-            using var proc = System.Diagnostics.Process.GetProcessById(pid);
-            proc.Kill();
-            AddTape($"全抛成交 · 已结束 {Trim(name)} ({pid})", Theme.Down);
-        }
-        catch
-        {
-            AddTape($"全抛失败 · {Trim(name)} ({pid}) 权限不足或已退出", Theme.Warn);
-        }
+        AddTape("远程监控不提供结束进程操作", Theme.Warn);
         Invalidate();
     }
 
@@ -820,7 +837,15 @@ internal sealed class AppForm : Form
         _tickCount++;
 
         var snap = _sampler.Latest;
-        if (!St.Paused && snap.Tick != _lastTick && snap.Tick > 0)
+        string remoteStatus = _sampler.Status + " " + _sampler.Error;
+        if (_lastRemoteStatus != remoteStatus)
+        {
+            _lastRemoteStatus = remoteStatus;
+            AddTape(remoteStatus.Trim(), RemoteLive ? Theme.Blue : Theme.Warn);
+            MarkAllDirty();
+            Invalidate(_title.Bounds);
+        }
+        if (!St.Paused && RemoteLive && snap.Tick != _lastTick && snap.Tick > 0)
         {
             _lastTick = snap.Tick;
             Ingest(snap);
@@ -829,7 +854,7 @@ internal sealed class AppForm : Form
         // 营收结算（隐藏时也要继续统计）
         if (St.Economy.Enabled)
         {
-            if (!St.Paused) St.Economy.Accrue(onScreen ? 0.033 : 0.25, St.Snap);
+            if (!St.Paused && RemoteLive) St.Economy.Accrue(onScreen ? 0.033 : 0.25, St.Snap);
             if (onScreen) MarkDirty(_econ);
         }
 
@@ -862,7 +887,8 @@ internal sealed class AppForm : Form
         if (_tickCount % 30 == 0 && _notify != null)
         {
             var sn = St.Snap;
-            string tip = $"CPU {sn.CpuPct:0}% · GPU {(sn.Gpu.Available ? sn.Gpu.UtilPct : 0):0}% · 内存 {sn.MemPct:0}%";
+            string gpuText = sn.Gpu.Available && double.IsFinite(sn.Gpu.UtilPct) ? $"{sn.Gpu.UtilPct:0}%" : "—";
+            string tip = RemoteLive ? $"{sn.HostName} · CPU {sn.CpuPct:0}% · GPU {gpuText} · 内存 {sn.MemPct:0}%" : RemoteStatus;
             if (St.Economy.Enabled) tip += $" · ¥{St.Economy.Total:N0}";
             if (tip.Length > 62) tip = tip.Substring(0, 62);
             try { _notify.Text = tip; } catch { }
@@ -892,6 +918,17 @@ internal sealed class AppForm : Form
 
     private void Ingest(Snapshot s)
     {
+        if (!_firstIngest || St.Snap.CoreMHz.Length != s.CoreMHz.Length)
+        {
+            string selected = _settings.SelectedCode;
+            St.Metrics = Catalog.Build(s.CoreMHz.Length);
+            St.ByCode("000303").Name = "文件描述符";
+            St.SelectedIndex = Math.Max(0, St.Metrics.FindIndex(m => m.Code == selected));
+            St.WatchScroll = 0;
+        }
+        St.CpuName = s.CpuName;
+        St.GpuName = s.Gpu.Name;
+        Text = $"性能行情终端 · {s.HostName} · Linux 远程行情";
         var prev = St.Snap;
         St.Snap = s;
         long now = Environment.TickCount64;
@@ -918,7 +955,7 @@ internal sealed class AppForm : Form
         {
             _hwProbed = true;
             Hw.GpuDriver = _sampler.GpuDriverVersion;
-            Hw.Probe(s, s.Gpu);
+            Hw.ProbeRemote(s);
             St.Economy.ApplyWeights(Hw);
             AddTape($"硬件探测完成 · {Hw.LogicalCores} 线程 / {Hw.MemTotalGB:0}G 内存 / {(Hw.HasGpu ? Hw.GpuMemGB.ToString("0.#") + "G 显存" : "无独显")}", Theme.Blue);
         }
@@ -937,7 +974,7 @@ internal sealed class AppForm : Form
         Comparison<ProcSample> cmp = St.ProcSort switch
         {
             0 => (a, b) => b.CpuPct.CompareTo(a.CpuPct),
-            1 => (a, b) => b.GpuPct.CompareTo(a.GpuPct),
+            1 => (a, b) => b.GpuMemMB.CompareTo(a.GpuMemMB),
             2 => (a, b) => b.MemMB.CompareTo(a.MemMB),
             _ => (a, b) => b.Threads.CompareTo(a.Threads),
         };

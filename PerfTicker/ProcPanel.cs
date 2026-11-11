@@ -157,10 +157,10 @@ internal sealed class ProcPanel : Panel
         Theme.Text(g, "名称 / 进程", hf, Theme.TextFade, new Rectangle(P(NameX), ch2.Y, P(120), ch2.Height), Theme.AL);
         Theme.Text(g, "现价 CPU%", hf, Theme.TextFade, new Rectangle((int)cx - P(64), ch2.Y, P(64), ch2.Height), Theme.AR);
         Theme.Text(g, "涨跌", hf, Theme.TextFade, new Rectangle((int)cg - P(54), ch2.Y, P(54), ch2.Height), Theme.AR);
-        Theme.Text(g, "GPU%", hf, Theme.TextFade, new Rectangle((int)cgp - P(58), ch2.Y, P(58), ch2.Height), Theme.AR);
+        Theme.Text(g, "GPU显存", hf, Theme.TextFade, new Rectangle((int)cgp - P(58), ch2.Y, P(58), ch2.Height), Theme.AR);
         Theme.Text(g, "内存", hf, Theme.TextFade, new Rectangle((int)cm - P(78), ch2.Y, P(78), ch2.Height), Theme.AR);
         Theme.Text(g, "线程", hf, Theme.TextFade, new Rectangle((int)ct - P(50), ch2.Y, P(50), ch2.Height), Theme.AR);
-        Theme.Text(g, "句柄", hf, Theme.TextFade, new Rectangle((int)ch - P(58), ch2.Y, P(58), ch2.Height), Theme.AR);
+        Theme.Text(g, "文件描述符", hf, Theme.TextFade, new Rectangle((int)ch - P(72), ch2.Y, P(72), ch2.Height), Theme.AR);
         Theme.Text(g, "K线走势", hf, Theme.TextFade, new Rectangle((int)csp, ch2.Y, P(SparkW), ch2.Height), Theme.AL);
         y += ColH;
 
@@ -223,8 +223,9 @@ internal sealed class ProcPanel : Panel
                 Math.Abs(p.CpuDelta) < 0.05 ? Theme.TextFade : dc,
                 new Rectangle((int)cg - P(54), rr.Y, P(50), rr.Height), Theme.AR);
 
-            Theme.Text(g, p.GpuPct > 0.05 ? p.GpuPct.ToString("0.0") : "—", Theme.NumXXS,
-                p.GpuPct > 30 ? Theme.Purple : Theme.Purple,
+            string gpuMem = !double.IsFinite(p.GpuMemMB) ? "—" : p.GpuMemMB >= 1024 ? (p.GpuMemMB / 1024).ToString("0.0") + "G" : p.GpuMemMB.ToString("0") + "M";
+            Theme.Text(g, gpuMem, Theme.NumXXS,
+                Theme.Purple,
                 new Rectangle((int)cgp - P(58), rr.Y, P(54), rr.Height), Theme.AR);
 
             string mem = p.MemMB >= 1024 ? (p.MemMB / 1024).ToString("0.00") + "G" : p.MemMB.ToString("0") + "M";
@@ -232,7 +233,7 @@ internal sealed class ProcPanel : Panel
                 new Rectangle((int)cm - P(78), rr.Y, P(74), rr.Height), Theme.AR);
             Theme.Text(g, p.Threads.ToString(), Theme.NumXXS, Theme.TextDim,
                 new Rectangle((int)ct - P(50), rr.Y, P(46), rr.Height), Theme.AR);
-            Theme.Text(g, p.Handles.ToString(), Theme.NumXXS, Theme.TextDim,
+            Theme.Text(g, p.Handles < 0 ? "—" : p.Handles.ToString(), Theme.NumXXS, Theme.TextDim,
                 new Rectangle((int)ch - P(58), rr.Y, P(54), rr.Height), Theme.AR);
 
             if (St.ProcHist.TryGetValue(p.Pid, out var hist) && hist.Len > 2)

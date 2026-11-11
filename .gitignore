@@ -28,6 +28,16 @@ video/*.png
 # 系统文件
 Thumbs.db
 .DS_Store
+artifacts/
+__pycache__/
+remote.json
+remote.json.*
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
 
 # 交付物（走 Release，不入库）
 /PerfTicker-promo.mp4
