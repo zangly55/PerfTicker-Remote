@@ -22,7 +22,7 @@ internal sealed class SensorNumberConverter : JsonConverter<double>
     }
 }
 
-internal sealed class RemoteSampler : IDisposable
+internal sealed class RemoteSampler : IMonitorSampler
 {
     internal static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -62,15 +62,21 @@ internal sealed class RemoteSampler : IDisposable
     {
         var s = JsonSerializer.Deserialize<Snapshot>(line, JsonOptions)
             ?? throw new InvalidDataException("采集器返回空数据。");
-        if (s.Protocol != 1 || !s.IsRemote || s.CoreMHz == null || s.CoreMHz.Length == 0
-            || s.CoreMHz.Length > 4096 || s.Gpu == null || s.Procs == null
+        if (s.Protocol is not (1 or 2) || !s.IsRemote || s.CoreMHz == null || s.CoreMHz.Length == 0
+            || s.CoreMHz.Length > 4096 || s.Gpu == null || s.Procs == null || s.Gpus == null
+            || s.Gpus.Count > 1024 || s.Gpus.Any(g => g == null || g.Index < 0 || g.Index > 10000)
+            || s.Procs.Any(p => p == null || p.GpuMemory == null)
             || !double.IsFinite(s.MemTotalGB) || s.MemTotalGB <= 0
             || !double.IsFinite(s.CpuPct) || s.CpuPct < 0 || s.CpuPct > 100)
             throw new InvalidDataException("采集器数据格式或必需指标无效。");
+        s.NormalizeGpus();
+        if (s.Gpus.Select(g => g.Id).Distinct().Count() != s.Gpus.Count
+            || s.Gpus.Select(g => g.Index).Distinct().Count() != s.Gpus.Count)
+            throw new InvalidDataException("GPU 编号或设备标识重复。");
         return s;
     }
 
-    internal static string CollectorCommand(int interval, int gpu)
+    internal static string CollectorCommand(int interval, int gpu = -1)
     {
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PerfTicker.collector.py");
         using var reader = new StreamReader(stream ?? throw new FileNotFoundException("采集脚本缺失"));
@@ -90,21 +96,12 @@ internal sealed class RemoteSampler : IDisposable
                 _status = "正在连接";
                 var config = _loadConfig();
                 config.Validate();
-                using var client = new SshClient(config.Host, config.Port, config.User, config.Password);
-                client.ConnectionInfo.Timeout = TimeSpan.FromSeconds(8);
-                client.KeepAliveInterval = TimeSpan.FromSeconds(5);
-                bool keyMismatch = false;
-                client.HostKeyReceived += (_, e) =>
-                {
-                    string fingerprint = "SHA256:" + Convert.ToBase64String(SHA256.HashData(e.HostKey)).TrimEnd('=');
-                    e.CanTrust = string.Equals(fingerprint, config.Fingerprint, StringComparison.Ordinal);
-                    keyMismatch = !e.CanTrust;
-                };
+                using var connection = new SshConnection(config);
+                var client = connection.Client;
                 using var stopConnection = _stop.Token.Register(() => { try { client.Dispose(); } catch { } });
-                try { client.Connect(); }
-                catch when (keyMismatch) { throw new InvalidOperationException("SSH 主机指纹不匹配，已拒绝连接。"); }
+                connection.Connect();
                 int interval = IntervalMs;
-                using var command = client.CreateCommand(CollectorCommand(interval, config.GpuIndex));
+                using var command = client.CreateCommand(CollectorCommand(interval));
                 command.CommandTimeout = Timeout.InfiniteTimeSpan;
                 var execution = command.BeginExecute();
                 using var output = new StreamReader(command.OutputStream, Encoding.UTF8);

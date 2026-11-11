@@ -1,19 +1,22 @@
-# PerfTicker Remote · Linux 算力机远程行情
+# PerfTicker Remote · 本机与多显卡服务器行情
 
-保留 PerfTicker 的股票行情、K 线、自选列表和桌面挂件，在 Windows 电脑上通过 SSH 监控 Linux 算力机。
+保留 PerfTicker 的股票行情、K 线、自选列表和桌面挂件，可选择监控当前 Windows 电脑，或通过 SSH 监控 Linux 算力机。
 
 此仓库是基于 [QiuSui1145/PerfTicker](https://github.com/QiuSui1145/PerfTicker) v1.5.0 的远程监控改造，沿用 GPL-3.0 许可，保留原作者 QiuSui / QiuSui_Studio 的署名。
 
-- 实时查看远端 CPU、GPU、显存、温度、功耗、磁盘和网络指标。
-- 进程表与主力持仓显示 NVIDIA 计算进程显存占用。
-- SSH 主机指纹校验、Windows 账户加密保存密码、自动重连与过期状态提示。
+- 自动枚举 NVIDIA 显卡：支持四卡、八卡及更多，每张卡独立行情与 K 线；“显卡总览”同时显示所有卡。
+- GPU 按 UUID 区分；进程显存按卡归属，另有全机显存、总功耗、平均负载和最高温度。
+- 设置 → 监控目标 → 切换，可选本机 Windows 或远程 Linux；切换清空上一目标的行情。
+- 自动读取此电脑的常用 SSH config 主机条目，也可手动输入主机名、IPv4、IPv6 和端口。
+- 检测 SSH / 读取指纹、测试登录与显卡；支持密码或 SSH 私钥文件认证。
+- 固定 SSH 主机指纹、Windows 账户加密保存密码/私钥口令、自动重连与过期状态提示。
 - 只读采集；远端使用 Python 3 标准库和 `nvidia-smi`，无需安装常驻服务。
 
-**构建：** 安装 .NET 10 SDK 后运行 `dotnet publish PerfTicker/PerfTicker.csproj -c Release -o dist`，双击 `dist/PerfTickerRemote.exe`。
+**另一台电脑使用：** 将编译后的 `PerfTickerRemote.exe` 拷贝到另一台 Windows x64 电脑直接运行，自带 .NET 运行时，无需安装客户端 Python 或 OpenSSH。首次默认监控本机，再到“监控目标”配置服务器。账号密码需在新电脑重新输入；不要复制旧电脑的加密配置。
 
-**配置：** 打开左上角设置 → 远程算力机 → 连接，填写主机、SSH 端口、账号、密码和已核实的主机 SHA256 指纹。仓库不包含个人连接配置、密码或真实采样数据。
+**从源码构建：** 安装 .NET 10 SDK，运行 `dotnet publish PerfTicker/PerfTicker.csproj -c Release -o dist`，双击 `dist/PerfTickerRemote.exe`。GitHub 的“Download ZIP”下载的是源码，需要先构建。
 
-完整说明见 [Linux 远程版使用指南](docs/REMOTE.md)。下方保留上游原版介绍；其中下载链接、Windows 本机采集和结束进程等描述针对上游原版，不代表本远程版。
+详见 [另一台电脑快速上手](docs/QUICKSTART.md) 和 [功能、数据与验证说明](docs/REMOTE.md)。仓库不包含个人连接配置、密码或真实采样数据。下方保留上游原版介绍；其下载链接和结束进程功能属于上游原版，不代表本分支。
 
 ---
 

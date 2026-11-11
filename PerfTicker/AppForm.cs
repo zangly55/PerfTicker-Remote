@@ -6,13 +6,15 @@ namespace PerfTicker;
 internal sealed class AppForm : Form
 {
     public AppState St = new();
-    public readonly Hardware Hw = new();
+    public Hardware Hw { get; private set; } = new();
 
-    private RemoteSampler _sampler;
+    private IMonitorSampler _sampler;
     private string _lastRemoteStatus = "";
-    private Rectangle _setRemote;
+    private Rectangle _setRemote, _setGpus;
+    public bool IsRemoteMode => _settings?.MonitorMode == MonitorSource.Remote;
+    public string SourceLabel => IsRemoteMode ? "远程" : "本机";
     public bool RemoteLive => _sampler?.IsLive == true;
-    public string RemoteStatus => _sampler?.Status ?? "等待远程连接";
+    public string RemoteStatus => _sampler?.Status ?? "等待采集";
     private readonly List<Panel> _panels = new();
     private TitleBarPanel _title;
     private IndexStripPanel _index;
@@ -173,7 +175,9 @@ internal sealed class AppForm : Form
         St.ProcSortDesc = _settings.ProcSortDesc;
         St.ApplyColorMode();
 
-        _sampler = new RemoteSampler(St.IntervalMs);
+        if (_settings.MonitorMode != MonitorSource.Local && _settings.MonitorMode != MonitorSource.Remote)
+            _settings.MonitorMode = File.Exists(RemoteConfig.ConfigPath) ? MonitorSource.Remote : MonitorSource.Local;
+        _sampler = MonitorSource.Create(_settings.MonitorMode, St.IntervalMs);
         ApplyTheme();
         St.Marquee = _settings.Marquee;
         St.Economy.Restore(_settings.EcoTotal, _settings.EcoPeak, _settings.EcoSeconds);
@@ -354,7 +358,8 @@ internal sealed class AppForm : Form
             };
             var menu = new ContextMenuStrip { ShowImageMargin = false };
             menu.Items.Add("打开主窗口", null, (s, e) => RestoreFromTray());
-            menu.Items.Add("远程连接", null, (s, e) => ConfigureRemote());
+            menu.Items.Add("监控目标 / SSH 连接", null, (s, e) => ConfigureRemote());
+            menu.Items.Add("显卡总览", null, (s, e) => ShowGpus());
             menu.Items.Add("营收归零", null, (s, e) => { St.Economy.Reset(); SaveSettings(); Invalidate(); });
             _trayGadget = new ToolStripMenuItem("桌面小挂件") { CheckOnClick = false, Checked = _settings.Gadget };
             _trayGadget.Click += (s, e) => ToggleGadget();
@@ -493,24 +498,49 @@ internal sealed class AppForm : Form
 
     public void ConfigureRemote()
     {
-        using var dialog = new ConnectionForm { TopMost = TopMost };
+        using var dialog = new ConnectionForm(_settings.MonitorMode) { TopMost = TopMost };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        SwitchMonitor(dialog.SelectedMode);
+    }
+
+    internal void SwitchMonitor(string mode)
+    {
+        // Construct successfully before retiring the current source; samples never cross sessions.
+        var next = MonitorSource.Create(mode, St.IntervalMs);
         _sampler?.Dispose();
-        _sampler = new RemoteSampler(St.IntervalMs);
+        _sampler = next;
+        _settings.MonitorMode = mode;
         St.Snap = new Snapshot();
         St.Metrics = Catalog.Build(1);
         St.SelectedIndex = 1;
         St.Procs.Clear();
+        St.Tape.Clear();
+        St.Paused = false;
+        St.WatchScroll = St.ProcScroll = 0;
+        St.SelectedProc = St.HoverProc = -1;
         St.ProcHist.Clear();
         _prevCpu.Clear();
         _prevPids.Clear();
         _prevNames.Clear();
         _hwProbed = _firstIngest = false;
         _lastTick = -1;
+        _lastRemoteStatus = "";
+        _menuOpen = false;
+        St.CpuName = St.GpuName = "";
+        Hw = new Hardware();
+        Text = $"性能行情终端 · {SourceLabel}行情";
         St.Economy.Reset();
         _settingsOpen = false;
-        AddTape("正在连接远程算力机", Theme.Blue);
+        AddTape(IsRemoteMode ? "正在连接远程算力机" : "正在采集本机", Theme.Blue);
+        SaveSettings();
+        _gadget?.Invalidate();
         Invalidate();
+    }
+
+    public void ShowGpus()
+    {
+        using var dialog = new GpuOverviewForm(this) { TopMost = TopMost };
+        dialog.ShowDialog(this);
     }
 
     public void ToggleMarquee()
@@ -621,7 +651,7 @@ internal sealed class AppForm : Form
         int w = Theme.Px(302);
         int x = Theme.Px(10);
         int y = _title.Bounds.Bottom + Theme.Px(6);
-        _setPanel = new Rectangle(x, y, w, Theme.Px(290));
+        _setPanel = new Rectangle(x, y, w, Theme.Px(326));
 
         var r = _setPanel;
         using (var sh = new SolidBrush(Color.FromArgb(70, 0, 0, 0)))
@@ -685,10 +715,15 @@ internal sealed class AppForm : Form
         Theme.Text(g, "打开", Theme.UiXS, _settingsHover == 6 ? Theme.Gold : Theme.TextDim, _setLog, Theme.AC);
         ry += Theme.Px(30);
 
-        Theme.Text(g, "远程算力机", Theme.UiM, Theme.Txt, new Rectangle(r.X + pad, ry, Theme.Px(140), Theme.Px(24)), Theme.AL);
+        Theme.Text(g, "监控目标 · " + SourceLabel, Theme.UiM, Theme.Txt, new Rectangle(r.X + pad, ry, Theme.Px(190), Theme.Px(24)), Theme.AL);
         _setRemote = new Rectangle(r.Right - pad - Theme.Px(64), ry, Theme.Px(64), Theme.Px(24));
         Theme.RoundedRect(g, _setRemote, 3f, Theme.ChipBg, Theme.Line2, 1f);
-        Theme.Text(g, "连接", Theme.UiXS, Theme.Gold, _setRemote, Theme.AC);
+        Theme.Text(g, "切换", Theme.UiXS, Theme.Gold, _setRemote, Theme.AC);
+        ry += Theme.Px(36);
+        Theme.Text(g, $"显卡总览 · {St.Snap.Gpus.Count} 张", Theme.UiM, Theme.Txt, new Rectangle(r.X + pad, ry, Theme.Px(190), Theme.Px(24)), Theme.AL);
+        _setGpus = new Rectangle(r.Right - pad - Theme.Px(64), ry, Theme.Px(64), Theme.Px(24));
+        Theme.RoundedRect(g, _setGpus, 3f, Theme.ChipBg, Theme.Line2, 1f);
+        Theme.Text(g, "查看", Theme.UiXS, Theme.Gold, _setGpus, Theme.AC);
         ry += Theme.Px(36);
         Theme.Text(g, "设置会自动保存到本地配置", Theme.UiXS, Theme.TextFade, new Rectangle(r.X + pad, ry, Theme.Px(240), Theme.Px(18)), Theme.AL);
     }
@@ -710,6 +745,7 @@ internal sealed class AppForm : Form
     private bool SettingsClick(Point p)
     {
         if (_setRemote.Contains(p)) { ConfigureRemote(); return true; }
+        if (_setGpus.Contains(p)) { _settingsOpen = false; ShowGpus(); Invalidate(); return true; }
         if (_setAuto.Contains(p)) { ToggleAutoStart(); return true; }
         if (_setMarquee.Contains(p)) { ToggleMarquee(); return true; }
         if (_setThemeDark.Contains(p)) { SetThemeMode(0); return true; }
@@ -918,17 +954,19 @@ internal sealed class AppForm : Form
 
     private void Ingest(Snapshot s)
     {
-        if (!_firstIngest || St.Snap.CoreMHz.Length != s.CoreMHz.Length)
+        if (!_firstIngest || St.Snap.CoreMHz.Length != s.CoreMHz.Length
+            || !St.Snap.Gpus.Select(g => (g.Index, g.Id)).SequenceEqual(s.Gpus.Select(g => (g.Index, g.Id))))
         {
-            string selected = _settings.SelectedCode;
-            St.Metrics = Catalog.Build(s.CoreMHz.Length);
-            St.ByCode("000303").Name = "文件描述符";
+            string selected = _firstIngest ? St.Selected.Code : _settings.SelectedCode;
+            St.Metrics = Catalog.Reconcile(St.Metrics, s);
+            St.ByCode("000303").Name = s.IsRemote ? "文件描述符" : "句柄数";
             St.SelectedIndex = Math.Max(0, St.Metrics.FindIndex(m => m.Code == selected));
             St.WatchScroll = 0;
+            _hwProbed = false;
         }
         St.CpuName = s.CpuName;
         St.GpuName = s.Gpu.Name;
-        Text = $"性能行情终端 · {s.HostName} · Linux 远程行情";
+        Text = $"性能行情终端 · {s.HostName} · {SourceLabel}行情 · {s.Gpus.Count} 张 GPU";
         var prev = St.Snap;
         St.Snap = s;
         long now = Environment.TickCount64;
@@ -955,7 +993,7 @@ internal sealed class AppForm : Form
         {
             _hwProbed = true;
             Hw.GpuDriver = _sampler.GpuDriverVersion;
-            Hw.ProbeRemote(s);
+            if (s.IsRemote) Hw.ProbeRemote(s); else Hw.Probe(s, s.Gpu);
             St.Economy.ApplyWeights(Hw);
             AddTape($"硬件探测完成 · {Hw.LogicalCores} 线程 / {Hw.MemTotalGB:0}G 内存 / {(Hw.HasGpu ? Hw.GpuMemGB.ToString("0.#") + "G 显存" : "无独显")}", Theme.Blue);
         }
@@ -974,7 +1012,7 @@ internal sealed class AppForm : Form
         Comparison<ProcSample> cmp = St.ProcSort switch
         {
             0 => (a, b) => b.CpuPct.CompareTo(a.CpuPct),
-            1 => (a, b) => b.GpuMemMB.CompareTo(a.GpuMemMB),
+            1 => St.Snap.IsRemote ? (a, b) => b.GpuMemMB.CompareTo(a.GpuMemMB) : (a, b) => b.GpuPct.CompareTo(a.GpuPct),
             2 => (a, b) => b.MemMB.CompareTo(a.MemMB),
             _ => (a, b) => b.Threads.CompareTo(a.Threads),
         };
@@ -1026,10 +1064,14 @@ internal sealed class AppForm : Form
             AddTape($"CPU 主频{dir} {(df > 0 ? "+" : "")}{df / 1000.0:0.00}GHz → {s.CpuAvgMHz / 1000.0:0.00}GHz",
                 df > 0 ? Theme.Up : Theme.Down);
         }
-        if (s.Gpu.Available && s.Gpu.TempC >= 82 && prev.Gpu.TempC < 82)
-            AddTape($"GPU 温度告警 {s.Gpu.TempC:0}°C", Theme.Warn);
-        if (s.Gpu.Available && s.Gpu.UtilPct >= 92 && prev.Gpu.UtilPct < 92)
-            AddTape($"GPU 负载触顶 {s.Gpu.UtilPct:0}%", Theme.Warn);
+        foreach (var gpu in s.Gpus)
+        {
+            var before = prev.FindGpu(gpu.Id);
+            if (gpu.Available && gpu.TempC >= 82 && !(before?.TempC >= 82))
+                AddTape($"GPU{gpu.Index} 温度告警 {gpu.TempC:0}°C", Theme.Warn);
+            if (gpu.Available && gpu.UtilPct >= 92 && !(before?.UtilPct >= 92))
+                AddTape($"GPU{gpu.Index} 负载触顶 {gpu.UtilPct:0}%", Theme.Warn);
+        }
         if (s.CpuPct >= 88 && prev.CpuPct < 88)
             AddTape($"CPU 负载预警 {s.CpuPct:0}%", Theme.Warn);
         if (s.MemPct >= 90 && prev.MemPct < 90)

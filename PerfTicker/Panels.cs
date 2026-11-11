@@ -133,7 +133,7 @@ internal sealed class TitleBarPanel : Panel
         }
 
         Theme.Text(g, "性能行情终端", Theme.BrandFont, Theme.TextHi, Rc(46, 5, 200, 19), Theme.AL);
-        Theme.Text(g, St.Snap.HostName.Length > 0 ? "REMOTE · " + St.Snap.HostName : "PERF · REMOTE", Theme.BrandSub, Theme.GoldDim, Rc(47, 22, 200, 14), Theme.AL);
+        Theme.TextEllipsis(g, (F.IsRemoteMode ? "REMOTE · " : "LOCAL · ") + St.Snap.HostName, Theme.BrandSub, Theme.GoldDim, Rc(47, 22, 140, 14), Theme.AL);
         // 设置齿轮
         bool setOn = F.SettingsOpen;
         if (setOn || _hover == 7) Theme.RoundedFill(g, Gear, 4f, setOn ? Color.FromArgb(46, Theme.Gold) : Theme.RowHover);
@@ -166,7 +166,7 @@ internal sealed class TitleBarPanel : Panel
             g.FillEllipse(halo, dotX - P(3), dotY - P(3), dotR + P(6), dotR + P(6));
         }
         using (var b = new SolidBrush(dotC)) g.FillEllipse(b, dotX, dotY, dotR, dotR);
-        string pillTxt = St.Paused ? "行情已暂停" : live ? $"远程行情 {St.IntervalMs / 1000.0:0.0}s" : F.RemoteStatus;
+        string pillTxt = St.Paused ? "行情已暂停" : live ? $"{F.SourceLabel}行情 {St.IntervalMs / 1000.0:0.0}s" : F.RemoteStatus;
         Theme.Text(g, pillTxt, Theme.UiXS, live ? Color.FromArgb(0x7E, 0xE0, 0xC0) : Theme.Warn,
             new Rectangle(dotX + P(10), Pill.Y, Pill.Width - P(20), Pill.Height), Theme.AL);
 

@@ -70,7 +70,7 @@ internal sealed class GadgetForm : Form
         // ── 标题行 ──
         int headH = Theme.Px(30);
         Theme.Text(g, "▮ 性能行情", Theme.UiS, Theme.TextHi, new Rectangle(Theme.Px(12), 4, Theme.Px(90), headH), Theme.AL);
-        Theme.Text(g, _app.RemoteLive ? "远程" : "断线", Theme.UiXS, _app.RemoteLive ? Theme.Gold : Theme.Warn, new Rectangle(Theme.Px(88), 4, Theme.Px(40), headH), Theme.AL);
+        Theme.Text(g, _app.RemoteLive ? _app.SourceLabel : "断线", Theme.UiXS, _app.RemoteLive ? Theme.Gold : Theme.Warn, new Rectangle(Theme.Px(88), 4, Theme.Px(40), headH), Theme.AL);
 
         _pinRect = new Rectangle(w - Theme.Px(58), Theme.Px(6), Theme.Px(22), Theme.Px(18));
         _closeRect = new Rectangle(w - Theme.Px(30), Theme.Px(6), Theme.Px(22), Theme.Px(18));
@@ -88,7 +88,7 @@ internal sealed class GadgetForm : Form
         int halfW = (w - Theme.Px(24)) / 2;
         Big(g, Theme.Px(12), y, halfW, "CPU", _app.RemoteLive ? cpu.ToString("0.0") + "%" : "—",
             (s.CpuAvgMHz > 0 ? s.CpuAvgMHz.ToString("0") + " MHz" : ""), Theme.Gold);
-        Big(g, Theme.Px(12) + halfW, y, halfW, "GPU", _app.RemoteLive && s.Gpu.Available && double.IsFinite(gpu) ? gpu.ToString("0.0") + "%" : "—",
+        Big(g, Theme.Px(12) + halfW, y, halfW, s.Gpus.Count > 1 ? "GPU 均值" : "GPU", _app.RemoteLive && s.Gpu.Available && double.IsFinite(gpu) ? gpu.ToString("0.0") + "%" : "—",
             (s.Gpu.Available && s.Gpu.ClockMHz > 0 ? s.Gpu.ClockMHz.ToString("0") + " MHz" : "未检测"), Theme.Cyan);
 
         // ── 迷你走势 ──

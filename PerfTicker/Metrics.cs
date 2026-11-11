@@ -22,6 +22,7 @@ internal sealed class Metric
     public string Name = "";
     public string Group = "";
     public string Unit = "";
+    public string GpuId = "";
     public int Decimals = 2;
     public Func<Snapshot, double> Read;
 
@@ -164,7 +165,7 @@ internal sealed class Metric
 
 internal static class Catalog
 {
-    public static List<Metric> Build(int cores)
+    public static List<Metric> Build(int cores, IReadOnlyList<GpuInfo> cards = null)
     {
         var list = new List<Metric>(64);
 
@@ -187,14 +188,35 @@ internal static class Catalog
                 $"逻辑处理器 {i + 1} 实时主频", s => idx < s.CoreMHz.Length ? s.CoreMHz[idx] / 1000.0 : 0);
         }
 
-        // 图形
-        Add("600519", "GPU 核心频率", "图形", "MHz", 0, "显卡核心实时频率", s => s.Gpu.ClockMHz);
-        Add("600520", "GPU 显存频率", "图形", "MHz", 0, "显存实时频率", s => s.Gpu.MemClockMHz);
-        Add("600521", "GPU 负载", "图形", "%", 1, "显卡引擎占用率", s => s.Gpu.UtilPct);
-        Add("600522", "显存占用", "图形", "%", 1, "显存使用率", s => s.Gpu.MemTotalMB > 0 ? s.Gpu.MemUsedMB / s.Gpu.MemTotalMB * 100.0 : double.NaN);
-        Add("600523", "GPU 温度", "图形", "°C", 0, "显卡核心温度", s => s.Gpu.TempC);
-        Add("600524", "GPU 功耗", "图形", "W", 1, "显卡实时功耗", s => s.Gpu.PowerW);
-        Add("600525", "GPU 风扇", "图形", "%", 0, "显卡风扇转速百分比", s => s.Gpu.FanPct);
+        // Summary retains upstream ticker codes. Every physical card has its own UUID-bound series.
+        void AddGpu(int code, string prefix, string id, bool summary)
+        {
+            var reads = new (string name, string unit, int decimals, Func<GpuInfo, double> read)[] {
+                (summary ? "平均核心频率" : "核心频率", "MHz", 0, g => g.ClockMHz),
+                (summary ? "平均显存频率" : "显存频率", "MHz", 0, g => g.MemClockMHz),
+                (summary ? "平均负载" : "负载", "%", 1, g => g.UtilPct),
+                ("显存占用", "%", 1, g => g.MemTotalMB > 0 ? g.MemUsedMB / g.MemTotalMB * 100 : double.NaN),
+                (summary ? "最高温度" : "温度", "°C", 0, g => g.TempC),
+                (summary ? "总功耗" : "功耗", "W", 1, g => g.PowerW),
+                (summary ? "最高风扇" : "风扇", "%", 0, g => g.FanPct),
+                ("已用显存", "GB", 2, g => g.MemUsedMB / 1024)
+            };
+            for (int i = 0; i < reads.Length; i++)
+            {
+                var item = reads[i];
+                Add((code + i).ToString(), prefix + item.name, "图形", item.unit, item.decimals, "", s => {
+                    var gpu = string.IsNullOrEmpty(id) ? s.Gpu : s.FindGpu(id);
+                    return gpu?.Available == true ? item.read(gpu) : double.NaN;
+                });
+                list[^1].GpuId = id;
+            }
+        }
+        bool multi = cards?.Count > 1;
+        AddGpu(600519, multi ? "GPU " : $"GPU{(cards?.Count == 1 ? cards[0].Index.ToString() : "")} ",
+            cards?.Count == 1 ? cards[0].Id : "", multi);
+        if (multi)
+            foreach (var gpu in cards.OrderBy(g => g.Index))
+                AddGpu(700000 + gpu.Index * 10, $"GPU{gpu.Index} ", gpu.Id, false);
 
         // 内存
         Add("000858", "已用内存", "内存", "GB", 2, "物理内存使用量", s => s.MemUsedGB);
@@ -213,6 +235,17 @@ internal static class Catalog
         Add("000303", "句柄数", "系统", "", 0, "当前句柄总数", s => s.Handles);
 
         return list;
+    }
+
+    public static List<Metric> Reconcile(List<Metric> previous, Snapshot snapshot)
+    {
+        var old = previous.ToDictionary(m => (m.Code, m.GpuId));
+        return Build(snapshot.CoreMHz.Length, snapshot.Gpus).Select(m => {
+            if (!old.TryGetValue((m.Code, m.GpuId), out var keep)) return m;
+            keep.Name = m.Name;
+            keep.Read = m.Read;
+            return keep;
+        }).ToList();
     }
 
     public static IReadOnlyList<string> GroupOrder = new[]

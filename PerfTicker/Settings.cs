@@ -6,6 +6,8 @@ namespace PerfTicker;
 internal sealed class Settings
 {
     public int SchemaVersion { get; set; } = 1;
+    // Empty migrates existing installations to their saved server; new PCs start locally.
+    public string MonitorMode { get; set; } = "";
 
     public int X { get; set; } = int.MinValue;
     public int Y { get; set; } = int.MinValue;

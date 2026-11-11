@@ -21,9 +21,10 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(c.cpu_percent((200, 160), (100, 80)), 20)
 
     def test_gpu_unsupported_sensors_are_null_not_zero(self):
-        row = 'NVIDIA GPU, 580.0, 25, 1, 1200, 2000, 2400, 100, 200, 60, 120.5, 300, [N/A]\n'
+        row = '0, GPU-a, NVIDIA GPU, 580.0, 25, 1, 1200, 2000, 2400, 100, 200, 60, 120.5, 300, [N/A]\n'
         with patch.object(c.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, row, '')):
-            gpu, driver, warning = c.gpu(0)
+            cards, driver, warning = c.gpus()
+        gpu = cards[0]
         self.assertIsNone(gpu['FanPct'])
         self.assertEqual(gpu['UtilPct'], 25)
         self.assertTrue(gpu['Available'])
@@ -31,10 +32,50 @@ class CollectorTests(unittest.TestCase):
 
     def test_gpu_failure_keeps_cpu_monitoring_possible(self):
         with patch.object(c.subprocess, 'run', side_effect=FileNotFoundError()):
-            gpu, _, warning = c.gpu(0)
-        self.assertFalse(gpu['Available'])
-        self.assertIsNone(gpu['PowerW'])
+            cards, _, warning = c.gpus()
+        self.assertEqual(cards, [])
         self.assertTrue(warning)
+
+    def test_four_eight_and_many_cards_use_one_query_and_keep_identity(self):
+        for count in (4, 8, 32):
+            rows = '\n'.join(f'{i}, GPU-{i}, NVIDIA GPU, 580.0, {i}, 1, 1200, 2000, 2400, {100+i}, 2000, 60, 120.5, 300, 50'
+                             for i in reversed(range(count)))
+            with patch.object(c.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, rows, '')) as run:
+                cards, _, warning = c.gpus()
+            self.assertEqual(len(cards), count)
+            self.assertEqual([g['Id'] for g in cards], [f'GPU-{i}' for i in range(count)])
+            self.assertEqual(cards[-1]['UtilPct'], count - 1)
+            self.assertEqual(run.call_count, 1)
+            self.assertNotIn('-i', run.call_args.args[0])
+            self.assertFalse(warning)
+
+    def test_bad_card_row_does_not_hide_other_cards(self):
+        rows = 'bad card\n2, GPU-two, NVIDIA GPU, 580, 20, 1, 1000, 2000, 2400, 100, 200, 60, 120, 300, 50\n'
+        with patch.object(c.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, rows, '')):
+            cards, _, warning = c.gpus()
+        self.assertEqual(cards[0]['Index'], 2)
+        self.assertTrue(warning)
+
+    def test_process_memory_is_partitioned_by_uuid_and_summed_per_pid(self):
+        rows = 'GPU-a, 42, 100\nGPU-b, 42, 200\nGPU-a, 77, [N/A]\nGPU-b, 77, 50\n'
+        with patch.object(c.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, rows, '')) as run:
+            memory = c.gpu_process_memory()
+        procs = [{'Pid': 42}, {'Pid': 77}, {'Pid': 88}]
+        c.attach_gpu_memory(procs, memory)
+        self.assertEqual(procs[0]['GpuMemory'], {'GPU-a': 100, 'GPU-b': 200})
+        self.assertEqual(procs[0]['GpuMemMB'], 300)
+        self.assertIsNone(procs[1]['GpuMemMB'])
+        self.assertIsNone(procs[2]['GpuMemMB'])
+        self.assertNotIn('-i', run.call_args.args[0])
+
+    def test_timeout_and_empty_inventory_are_supported(self):
+        with patch.object(c.subprocess, 'run', side_effect=subprocess.TimeoutExpired('nvidia-smi', 3)):
+            cards, _, warning = c.gpus()
+        self.assertEqual(cards, [])
+        self.assertTrue(warning)
+        with patch.object(c.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '', '')):
+            cards, _, _ = c.gpus()
+        self.assertEqual(cards, [])
 
     def test_pid_reuse_and_parentheses_in_process_names(self):
         fields = ['S'] + ['0'] * 23

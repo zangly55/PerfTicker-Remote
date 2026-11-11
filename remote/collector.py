@@ -1,6 +1,7 @@
 """Read-only Linux telemetry. Stdlib only; JSON lines on stdout, no listening port.
 
-Runs from memory over SSH. Arguments: interval_seconds gpu_index [sample_count].
+Runs from memory over SSH. Arguments: interval_seconds legacy_gpu_index [sample_count].
+All NVIDIA GPUs are collected in two batched nvidia-smi queries per sample.
 Unavailable numeric sensors are JSON null. CPU process percentages are whole-host.
 """
 import csv
@@ -132,22 +133,28 @@ GPU_NUMBERS = ['UtilPct', 'MemUtilPct', 'ClockMHz', 'MemClockMHz', 'MaxClockMHz'
                'MemUsedMB', 'MemTotalMB', 'TempC', 'PowerW', 'PowerLimitW', 'FanPct']
 
 
-def gpu(index):
-    g = dict.fromkeys(GPU_NUMBERS)
-    g.update(Available=False, Nvml=False, Name='GPU 数据不可用')
+def gpus():
     try:
-        result = subprocess.run(['nvidia-smi', '-i', str(index),
-                                 '--query-gpu=' + ','.join(GPU_FIELDS),
+        result = subprocess.run(['nvidia-smi',
+                                 '--query-gpu=index,uuid,' + ','.join(GPU_FIELDS),
                                  '--format=csv,noheader,nounits'],
                                 capture_output=True, text=True, timeout=3, check=True)
-        row = next(csv.reader(io.StringIO(result.stdout)))
-        if len(row) != len(GPU_FIELDS):
-            raise ValueError('unexpected nvidia-smi columns')
-        g.update(zip(GPU_NUMBERS, (number(x.strip()) for x in row[2:])))
-        g.update(Name=row[0].strip(), Available=True, Nvml=True)
-        return g, row[1].strip(), ''
-    except (OSError, ValueError, StopIteration, subprocess.SubprocessError) as exc:
-        return g, '', 'GPU 采集不可用 (' + type(exc).__name__ + ')'
+        cards, drivers, warnings = [], [], []
+        for row in csv.reader(io.StringIO(result.stdout)):
+            if not row:
+                continue
+            try:
+                if len(row) != len(GPU_FIELDS) + 2 or int(row[0]) < 0 or not row[1].strip():
+                    raise ValueError('unexpected nvidia-smi columns')
+                g = dict(zip(GPU_NUMBERS, (number(x.strip()) for x in row[4:])))
+                g.update(Index=int(row[0]), Id=row[1].strip(), Name=row[2].strip(), Available=True, Nvml=True)
+                cards.append(g)
+                drivers.append(row[3].strip())
+            except (ValueError, IndexError):
+                warnings.append('部分 GPU 数据无法解析')
+        return sorted(cards, key=lambda g: g['Index']), ', '.join(dict.fromkeys(drivers)), '; '.join(dict.fromkeys(warnings))
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return [], '', 'GPU 采集不可用 (' + type(exc).__name__ + ')'
 
 
 def cpu_info():
@@ -158,25 +165,41 @@ def cpu_info():
     return entries
 
 
-def gpu_process_memory(index):
+def gpu_process_memory():
     try:
-        result = subprocess.run(['nvidia-smi', '-i', str(index),
-                                 '--query-compute-apps=pid,used_gpu_memory', '--format=csv,noheader,nounits'],
+        result = subprocess.run(['nvidia-smi',
+                                 '--query-compute-apps=gpu_uuid,pid,used_gpu_memory', '--format=csv,noheader,nounits'],
                                 capture_output=True, text=True, timeout=3, check=True)
-        return {int(row[0].strip()): number(row[1].strip())
-                for row in csv.reader(io.StringIO(result.stdout)) if len(row) == 2}
+        memory = {}
+        for row in csv.reader(io.StringIO(result.stdout)):
+            if len(row) != 3:
+                continue
+            try:
+                pid, identity, value = int(row[1].strip()), row[0].strip(), number(row[2].strip())
+            except ValueError:
+                continue
+            by_gpu = memory.setdefault(pid, {})
+            old = by_gpu.get(identity, 0)
+            by_gpu[identity] = old + value if old is not None and value is not None else None
+        return memory
     except (OSError, ValueError, subprocess.SubprocessError):
         return {}
 
 
+def attach_gpu_memory(rows, memory):
+    for row in rows:
+        by_gpu = memory.get(row['Pid'], {})
+        row['GpuMemory'] = by_gpu
+        row['GpuMemMB'] = sum(by_gpu.values()) if by_gpu and all(v is not None for v in by_gpu.values()) else None
+
+
 def main():
     interval = max(0.5, min(10, float(sys.argv[1]) if len(sys.argv) > 1 else 1))
-    gpu_index = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     limit = int(sys.argv[3]) if len(sys.argv) > 3 else 0
     info = cpu_info()
     physical = len({(c['physical id'], c['core id']) for c in info if 'physical id' in c and 'core id' in c})
     osinfo = dict(line.split('=', 1) for line in read('/etc/os-release').splitlines() if '=' in line)
-    metadata = dict(Protocol=1, IsRemote=True, HostName=platform.node(),
+    metadata = dict(Protocol=2, IsRemote=True, HostName=platform.node(),
                     OsName=osinfo.get('PRETTY_NAME', 'Linux').strip('"'),
                     OsBuild=platform.release(), Arch=platform.machine(), PhysicalCores=physical,
                     CpuName=info[0].get('model name', '处理器') if info else '处理器')
@@ -207,17 +230,15 @@ def main():
         good_freqs = [x for x in freqs if x is not None]
         peak = [number(read(p).strip()) for p in glob.glob('/sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_max_freq')]
         speeds = [number(read('/sys/class/net/' + name + '/speed').strip()) for name in net]
-        g, driver, warning = gpu(gpu_index)
-        gpu_memory = gpu_process_memory(gpu_index) if g['Available'] else {}
-        for row in rows:
-            row['GpuMemMB'] = gpu_memory.get(row['Pid'])
+        cards, driver, warning = gpus()
+        attach_gpu_memory(rows, gpu_process_memory() if cards else {})
         snap = dict(metadata, Tick=count + 1, WallSeconds=now, CoreMHz=freqs,
                     CorePct=[cpu_percent(cpu[k], prev_cpu.get(k, cpu[k])) for k in keys],
                     CpuPct=cpu_percent(cpu['cpu'], prev_cpu.get('cpu', cpu['cpu'])),
                     CpuAvgMHz=sum(good_freqs) / len(good_freqs) if good_freqs else None,
                     CpuMaxMHz=max(good_freqs, default=None),
                     CpuPeakMHz=max((v / 1000 for v in peak if v is not None), default=max(good_freqs, default=0)),
-                    Gpu=g, GpuDriver=driver, SensorWarning=warning,
+                    Gpus=cards, GpuDriver=driver, SensorWarning=warning,
                     DiskReadMBps=dr[0] / 1048576, DiskWriteMBps=dr[1] / 1048576,
                     DiskBusyPct=min(100, dr[2] / 10 / max(1, len(disk))), FixedDisks=len(disk),
                     NetRxMBps=nr[0] / 1048576, NetTxMBps=nr[1] / 1048576,

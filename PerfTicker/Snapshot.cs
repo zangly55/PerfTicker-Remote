@@ -7,6 +7,9 @@ internal sealed class ProcSample
     public double CpuPct;      // 单核百分比（100 = 占满一颗核心）
     public double GpuPct;      // GPU 引擎占用百分比
     public double GpuMemMB = double.NaN; // NVIDIA compute process memory, unavailable => NaN
+    public Dictionary<string, double> GpuMemory = new();
+    public double MemoryOnGpu(string id) => string.IsNullOrEmpty(id) ? GpuMemMB
+        : GpuMemory.TryGetValue(id, out var value) ? value : double.NaN;
     public double MemMB;       // 工作集
     public int Threads;
     public int Handles;
@@ -16,19 +19,21 @@ internal sealed class ProcSample
 
 internal sealed class GpuInfo
 {
+    public int Index;
+    public string Id = "";
     public bool Available;
     public string Name = "图形处理器";
-    public double UtilPct;
-    public double MemUtilPct;
-    public double ClockMHz;
-    public double MemClockMHz;
-    public double MaxClockMHz;
-    public double MemUsedMB;
-    public double MemTotalMB;
-    public double TempC;
-    public double PowerW;
-    public double PowerLimitW;
-    public double FanPct;
+    public double UtilPct = double.NaN;
+    public double MemUtilPct = double.NaN;
+    public double ClockMHz = double.NaN;
+    public double MemClockMHz = double.NaN;
+    public double MaxClockMHz = double.NaN;
+    public double MemUsedMB = double.NaN;
+    public double MemTotalMB = double.NaN;
+    public double TempC = double.NaN;
+    public double PowerW = double.NaN;
+    public double PowerLimitW = double.NaN;
+    public double FanPct = double.NaN;
     public bool Nvml;
 }
 
@@ -60,6 +65,42 @@ internal sealed class Snapshot
     public double PageUsedGB, PageTotalGB;
 
     public GpuInfo Gpu = new();
+    public List<GpuInfo> Gpus = new();
+
+    public GpuInfo FindGpu(string id) => Gpus.FirstOrDefault(g => g.Id == id);
+
+    public void NormalizeGpus()
+    {
+        // Protocol 1 snapshots remain readable by diagnostics and older fixtures.
+        if (Protocol == 1 && Gpus.Count == 0 && Gpu.Available) Gpus.Add(Gpu);
+        foreach (var gpu in Gpus)
+            if (string.IsNullOrWhiteSpace(gpu.Id)) gpu.Id = "index:" + gpu.Index;
+        if (Protocol == 1 && Gpus.Count == 1)
+            foreach (var p in Procs)
+                if (double.IsFinite(p.GpuMemMB)) p.GpuMemory.TryAdd(Gpus[0].Id, p.GpuMemMB);
+        Gpu = AggregateGpu(Gpus);
+    }
+
+    internal static GpuInfo AggregateGpu(IReadOnlyList<GpuInfo> cards)
+    {
+        if (cards.Count == 1) return cards[0];
+        double Combine(Func<GpuInfo, double> read, string mode)
+        {
+            var values = cards.Select(read).ToArray();
+            // Partial readings must not look like a complete machine total.
+            if (values.Length == 0 || values.Any(v => !double.IsFinite(v))) return double.NaN;
+            return mode == "sum" ? values.Sum() : mode == "max" ? values.Max() : values.Average();
+        }
+        return new GpuInfo {
+            Available = cards.Any(g => g.Available), Name = cards.Count == 0 ? "GPU 数据不可用" : $"{cards.Count} 张 GPU 汇总",
+            UtilPct = Combine(g => g.UtilPct, "avg"), MemUtilPct = Combine(g => g.MemUtilPct, "avg"),
+            ClockMHz = Combine(g => g.ClockMHz, "avg"), MemClockMHz = Combine(g => g.MemClockMHz, "avg"),
+            MaxClockMHz = Combine(g => g.MaxClockMHz, "avg"), MemUsedMB = Combine(g => g.MemUsedMB, "sum"),
+            MemTotalMB = Combine(g => g.MemTotalMB, "sum"), PowerW = Combine(g => g.PowerW, "sum"),
+            PowerLimitW = Combine(g => g.PowerLimitW, "sum"), TempC = Combine(g => g.TempC, "max"),
+            FanPct = Combine(g => g.FanPct, "max"), Nvml = cards.Count > 0 && cards.All(g => g.Nvml)
+        };
+    }
 
     public double DiskReadMBps, DiskWriteMBps, DiskBusyPct;
     public double NetRxMBps, NetTxMBps;

@@ -262,6 +262,7 @@ internal sealed class GpuProbe : IDisposable
     private delegate int NvInit();
     private delegate int NvShutdown();
     private delegate int NvGetHandle(uint index, out IntPtr dev);
+    private delegate int NvCount(ref uint count);
     private delegate int NvGetName(IntPtr dev, StringBuilder name, uint len);
     private delegate int NvUtil(IntPtr dev, ref NvUtilization u);
     private delegate int NvClock(IntPtr dev, uint type, ref uint mhz);
@@ -277,7 +278,8 @@ internal sealed class GpuProbe : IDisposable
     private struct NvMemory { public ulong Total; public ulong Free; public ulong Used; }
 
     private IntPtr _lib = IntPtr.Zero;
-    private IntPtr _dev = IntPtr.Zero;
+    private NvCount _getCount;
+    private NvGetName _getName, _getUuid;
     private NvGetHandle _getHandle;
     private NvUtil _util;
     private NvClock _clock, _maxClock;
@@ -285,9 +287,8 @@ internal sealed class GpuProbe : IDisposable
     private NvU32 _fan, _power, _powerLimit;
     private NvTemp _temp;
     private bool _init;
-    private string _name = "图形处理器";
     public string DriverVersion { get; private set; } = "";
-    public bool Available => _init && _dev != IntPtr.Zero;
+    public bool Available => _init;
 
     public void Init()
     {
@@ -296,7 +297,9 @@ internal sealed class GpuProbe : IDisposable
             if (!NativeLibrary.TryLoad("nvml.dll", out _lib)) return;
             var init = Load<NvInit>("nvmlInit_v2") ?? Load<NvInit>("nvmlInit");
             _getHandle = Load<NvGetHandle>("nvmlDeviceGetHandleByIndex_v2") ?? Load<NvGetHandle>("nvmlDeviceGetHandleByIndex");
-            var getName = Load<NvGetName>("nvmlDeviceGetName");
+            _getCount = Load<NvCount>("nvmlDeviceGetCount_v2") ?? Load<NvCount>("nvmlDeviceGetCount");
+            _getName = Load<NvGetName>("nvmlDeviceGetName");
+            _getUuid = Load<NvGetName>("nvmlDeviceGetUUID");
             _util = Load<NvUtil>("nvmlDeviceGetUtilizationRates");
             _clock = Load<NvClock>("nvmlDeviceGetClockInfo");
             _maxClock = Load<NvClock>("nvmlDeviceGetMaxClockInfo");
@@ -306,14 +309,9 @@ internal sealed class GpuProbe : IDisposable
             _powerLimit = Load<NvU32>("nvmlDeviceGetEnforcedPowerLimit");
             _temp = Load<NvTemp>("nvmlDeviceGetTemperature");
 
-            if (init == null || _getHandle == null || _util == null) return;
+            if (init == null || _getHandle == null || _getCount == null || _util == null) return;
             if (init() != 0) return;
-            if (_getHandle(0, out _dev) != 0) { _dev = IntPtr.Zero; return; }
-            if (getName != null)
-            {
-                var sb = new StringBuilder(96);
-                if (getName(_dev, sb, 96) == 0) _name = sb.ToString().Trim();
-            }
+            _init = true;
             var drv = Load<NvDriver>("nvmlSystemGetDriverVersion");
             if (drv != null)
             {
@@ -337,54 +335,56 @@ internal sealed class GpuProbe : IDisposable
 
     public void Sample(Snapshot s, PdhProbe pdh)
     {
-        var g = s.Gpu;
-        g.Name = _name;
-        g.Nvml = Available;
-
-        double pdhUtil = 0;
-        if (pdh != null && pdh.IsValid)
+        uint count = 0;
+        if (Available && _getCount(ref count) == 0)
         {
-            pdhUtil = pdh.Sum("gpuUtil");
-            if (pdhUtil > 100) pdhUtil = 100;
+            for (uint i = 0; i < Math.Min(count, 1024); i++)
+            {
+                var g = new GpuInfo { Index = (int)i, Id = "index:" + i, Name = "NVIDIA GPU " + i };
+                if (_getHandle(i, out var dev) == 0)
+                {
+                    var name = new StringBuilder(128);
+                    if (_getName != null && _getName(dev, name, 128) == 0) g.Name = name.ToString();
+                    var uuid = new StringBuilder(128);
+                    if (_getUuid != null && _getUuid(dev, uuid, 128) == 0) g.Id = uuid.ToString();
+                    ReadDevice(g, dev);
+                }
+                s.Gpus.Add(g);
+            }
         }
-
-        if (!Available)
+        else if (pdh != null && pdh.IsValid && pdh.Items("gpuUtil").Any())
         {
-            g.Available = pdh != null && pdh.IsValid && pdhUtil > 0;
-            g.UtilPct = pdhUtil;
-            g.Name = _name;
-            return;
+            s.Gpus.Add(new GpuInfo { Id = "pdh:all", Name = "GPU 引擎汇总（系统计数器）",
+                Available = true, UtilPct = Math.Clamp(pdh.Sum("gpuUtil"), 0, 100) });
         }
+        s.NormalizeGpus();
+    }
 
-        g.Available = true;
+    private void ReadDevice(GpuInfo g, IntPtr dev)
+    {
+        g.Available = g.Nvml = true;
         var u = new NvUtilization();
-        if (_util(_dev, ref u) == 0)
+        if (_util(dev, ref u) == 0)
         {
-            g.UtilPct = Math.Max(u.Gpu, pdhUtil);
+            g.UtilPct = u.Gpu;
             g.MemUtilPct = u.Memory;
-        }
-        else
-        {
-            g.UtilPct = pdhUtil;
         }
 
         uint v = 0;
-        if (_clock != null && _clock(_dev, 1, ref v) == 0) g.ClockMHz = v;   // SM/graphics
-        if (_clock != null && _clock(_dev, 2, ref v) == 0) g.MemClockMHz = v;
-        if (_maxClock != null && _maxClock(_dev, 1, ref v) == 0) g.MaxClockMHz = v;
+        if (_clock != null && _clock(dev, 1, ref v) == 0) g.ClockMHz = v;
+        if (_clock != null && _clock(dev, 2, ref v) == 0) g.MemClockMHz = v;
+        if (_maxClock != null && _maxClock(dev, 1, ref v) == 0) g.MaxClockMHz = v;
 
         var m = new NvMemory();
-        if (_mem != null && _mem(_dev, ref m) == 0 && m.Total > 0)
+        if (_mem != null && _mem(dev, ref m) == 0 && m.Total > 0)
         {
             g.MemTotalMB = m.Total / 1048576.0;
             g.MemUsedMB = m.Used / 1048576.0;
         }
-        if (_temp != null && _temp(_dev, 0, ref v) == 0) g.TempC = v;
-        if (_fan != null && _fan(_dev, ref v) == 0) g.FanPct = v;
-        if (_power != null && _power(_dev, ref v) == 0) g.PowerW = v / 1000.0;
-        if (_powerLimit != null && _powerLimit(_dev, ref v) == 0) g.PowerLimitW = v / 1000.0;
-
-        if (g.ClockMHz <= 0 && pdh != null && pdh.IsValid) g.ClockMHz = 0;
+        if (_temp != null && _temp(dev, 0, ref v) == 0) g.TempC = v;
+        if (_fan != null && _fan(dev, ref v) == 0) g.FanPct = v;
+        if (_power != null && _power(dev, ref v) == 0) g.PowerW = v / 1000.0;
+        if (_powerLimit != null && _powerLimit(dev, ref v) == 0) g.PowerLimitW = v / 1000.0;
     }
 
     public void Dispose()
@@ -396,12 +396,13 @@ internal sealed class GpuProbe : IDisposable
         }
         catch { }
         _init = false;
-        _dev = IntPtr.Zero;
+        if (_lib != IntPtr.Zero) NativeLibrary.Free(_lib);
+        _lib = IntPtr.Zero;
     }
 }
 
 /// <summary>进程快照：一次 NtQuerySystemInformation 拿到全部进程的 CPU 时间 / 工作集 / 线程 / 句柄。</summary>
-internal sealed class ProcessProbe
+internal sealed class ProcessProbe : IDisposable
 {
     private IntPtr _buf;
     private int _bufLen = 1 << 20;
@@ -480,10 +481,16 @@ internal sealed class ProcessProbe
         s.Threads = threads;
         s.Handles = handles;
     }
+
+    public void Dispose()
+    {
+        if (_buf != IntPtr.Zero) Marshal.FreeHGlobal(_buf);
+        _buf = IntPtr.Zero;
+    }
 }
 
 /// <summary>统一采样器：后台线程按周期采集，产出不可变快照。</summary>
-internal sealed class Sampler : IDisposable
+internal sealed class Sampler : IMonitorSampler
 {
     private readonly PdhProbe _pdh = new();
     private readonly CpuProbe _cpu = new();
@@ -499,6 +506,12 @@ internal sealed class Sampler : IDisposable
     private readonly Stopwatch _ctxSw = Stopwatch.StartNew();
     private double _prevCtx = -1;
     private long _prevCtxMs;
+    private long _receivedAt;
+    private string _error = "";
+    private readonly ManualResetEventSlim _wake = new(false);
+    public bool IsLive => !_stop && Latest.Tick > 0 && Environment.TickCount64 - Interlocked.Read(ref _receivedAt) < Math.Max(5000, IntervalMs * 3);
+    public string Status => IsLive ? "本机行情在线" : Latest.Tick > 0 ? "本机数据已过期" : "正在采集本机";
+    public string Error => Volatile.Read(ref _error);
 
     public int Cores { get; }
     public string CpuName => _cpu.Name;
@@ -542,26 +555,28 @@ internal sealed class Sampler : IDisposable
     {
         var sw = Stopwatch.StartNew();
         long next = 0;
-        while (!_stop)
+        try { while (!_stop)
         {
             try
             {
                 Sample();
             }
-            catch
+            catch (Exception ex)
             {
-                // 单次采样异常不影响后续
+                _error = ex.Message;
             }
             next += IntervalMs;
             long wait = next - sw.ElapsedMilliseconds;
             if (wait < 20) { next = sw.ElapsedMilliseconds; wait = 60; }
-            Thread.Sleep((int)wait);
-        }
+            _wake.Wait((int)wait);
+        } }
+        finally { _gpu.Dispose(); _pdh.Dispose(); _proc.Dispose(); _wake.Dispose(); }
     }
 
     private void Sample()
     {
-        var s = new Snapshot { Tick = Interlocked.Increment(ref _tick), WallSeconds = _up.Elapsed.TotalSeconds };
+        var s = new Snapshot { Tick = Interlocked.Increment(ref _tick), WallSeconds = _up.Elapsed.TotalSeconds,
+            HostName = Environment.MachineName, OsName = "Windows", IsRemote = false };
         _pdh.Collect();
 
         _cpu.Sample(s, _pdh);
@@ -577,10 +592,11 @@ internal sealed class Sampler : IDisposable
         }
 
         _gpu.Sample(s, _pdh);
+        s.GpuDriver = _gpu.DriverVersion;
 
         s.DiskReadMBps = Math.Max(0, _pdh.Sum("diskRead")) / 1048576.0;
         s.DiskWriteMBps = Math.Max(0, _pdh.Sum("diskWrite")) / 1048576.0;
-        s.DiskBusyPct = Math.Clamp(_pdh.Sum("diskBusy") / Math.Max(1, Environment.ProcessorCount) * 0, 0, 100);
+        s.DiskBusyPct = Math.Clamp(_pdh.Sum("diskBusy"), 0, 100);
         s.NetRxMBps = Math.Max(0, _pdh.Sum("netRx")) / 1048576.0;
         s.NetTxMBps = Math.Max(0, _pdh.Sum("netTx")) / 1048576.0;
 
@@ -615,6 +631,8 @@ internal sealed class Sampler : IDisposable
         _proc.Sample(s, Cores, gpuByPid);
 
         lock (_lock) _latest = s;
+        Interlocked.Exchange(ref _receivedAt, Environment.TickCount64);
+        _error = "";
     }
 
     private static int ParsePid(string instance)
@@ -633,8 +651,7 @@ internal sealed class Sampler : IDisposable
     public void Dispose()
     {
         _stop = true;
-        try { _thread.Join(400); } catch { }
-        _gpu.Dispose();
-        _pdh.Dispose();
+        try { _wake.Set(); } catch (ObjectDisposedException) { }
+        // Sampler thread owns native resources until its final sample exits.
     }
 }

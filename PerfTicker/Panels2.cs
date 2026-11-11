@@ -16,7 +16,8 @@ internal sealed class BookPanel : Panel
         get
         {
             var m = St.Selected;
-            if (m.Group == "图形") return "GPU 显存持仓";
+            if (m.Group == "图形") return !F.IsRemoteMode ? "全机 GPU 引擎" :
+                string.IsNullOrEmpty(m.GpuId) ? "全部 GPU 显存" : $"GPU{St.Snap.FindGpu(m.GpuId)?.Index} 显存";
             if (m.Name.Contains("内存") || m.Name.Contains("提交")) return "内存持仓";
             if (m.Name.Contains("磁盘")) return "CPU 持仓";
             return "CPU 持仓";
@@ -29,7 +30,7 @@ internal sealed class BookPanel : Panel
         var m = St.Selected;
         var procs = St.Procs;
         if (m.Group == "图形")
-            _rank.AddRange(procs.Where(p => p.GpuMemMB > 0).OrderByDescending(p => p.GpuMemMB).Take(RowCount));
+            _rank.AddRange(procs.Where(p => ValOf(p) > 0).OrderByDescending(p => ValOf(p)).Take(RowCount));
         else if (m.Name.Contains("内存") || m.Name.Contains("提交"))
             _rank.AddRange(procs.OrderByDescending(p => p.MemMB).Take(RowCount));
         else if (m.Name.Contains("磁盘"))
@@ -41,7 +42,7 @@ internal sealed class BookPanel : Panel
     private double ValOf(ProcSample p)
     {
         var m = St.Selected;
-        if (m.Group == "图形") return p.GpuMemMB;
+        if (m.Group == "图形") return F.IsRemoteMode ? p.MemoryOnGpu(m.GpuId) : p.GpuPct;
         if (m.Name.Contains("内存") || m.Name.Contains("提交")) return p.MemMB;
         return p.CpuPct;
     }
@@ -49,7 +50,10 @@ internal sealed class BookPanel : Panel
     private string FmtVal(ProcSample p)
     {
         var m = St.Selected;
-        if (m.Group == "图形") return p.GpuMemMB >= 1024 ? (p.GpuMemMB / 1024).ToString("0.00") + "G" : p.GpuMemMB.ToString("0") + "M";
+        if (m.Group == "图形") {
+            double value = ValOf(p);
+            return !F.IsRemoteMode ? value.ToString("0.0") + "%" : value >= 1024 ? (value / 1024).ToString("0.00") + "G" : value.ToString("0") + "M";
+        }
         if (m.Name.Contains("内存") || m.Name.Contains("提交")) return p.MemMB >= 1024 ? (p.MemMB / 1024).ToString("0.00") + "G" : p.MemMB.ToString("0") + "M";
         return p.CpuPct.ToString("0.0") + "%";
     }
@@ -123,7 +127,7 @@ internal sealed class BookPanel : Panel
         string dim = St.Selected.Group == "图形" ? "" : "%";
         string total = St.Selected.Group == "图形" || St.Selected.Name.Contains("内存") ? "" : "%";
         Theme.Text(g, "合计", Theme.UiXS, Theme.TextDim, new Rectangle(P(12), sumR.Y, P(40), sumR.Height), Theme.AL);
-        Theme.Text(g, sum.ToString("0.0") + (St.Selected.Group == "图形" ? " MB" : total), Theme.NumXS, Theme.Gold, new Rectangle(P(46), sumR.Y, P(120), sumR.Height), Theme.AL);
+        Theme.Text(g, sum.ToString("0.0") + (St.Selected.Group == "图形" ? (F.IsRemoteMode ? " MB" : "%") : total), Theme.NumXS, Theme.Gold, new Rectangle(P(46), sumR.Y, P(120), sumR.Height), Theme.AL);
         Theme.Text(g, $"{St.Procs.Count} 只", Theme.UiXS, Theme.TextFade, new Rectangle(Bounds.Width - P(70), sumR.Y, P(58), sumR.Height), Theme.AR);
         End(g);
     }
