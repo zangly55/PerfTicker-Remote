@@ -27,6 +27,38 @@ permissions:
   contents: read
 
 jobs:
+  windows:
+    name: Windows UI and package
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Windows fixture and native rendering checks
+        run: |
+          dotnet run --project tests/PerfTicker.Tests -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project tests/PerfTicker.Tests -c Release -- --gui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish Windows package
+        run: dotnet publish PerfTicker/PerfTicker.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish
+      - name: Package Windows
+        run: python tools/package_desktop.py --rid win-x64 --input artifacts/publish
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-validation
+          path: |
+            artifacts/windows-ui/*.png
+            dist/packages/Windows/*.zip
+            dist/packages/Windows/*.sha256
+          retention-days: 30
+
   macos:
     name: Runtime (${{ matrix.rid }})
     strategy:
@@ -48,7 +80,7 @@ jobs:
       - name: Fixture regression checks
         run: |
           dotnet run --project tests/PerfTicker.Desktop.Tests -c Release
-          python -m unittest discover -s tests -p 'test_collector.py'
+          python -m unittest discover -s tests -p 'test_*.py'
       - name: Publish self-contained macOS app
         run: dotnet publish CrossPlatform/PerfTicker.Desktop.csproj -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/publish
       - name: Package and sign
@@ -57,6 +89,12 @@ jobs:
         run: python -m pip install paramiko==4.0.0
       - name: Test extracted app, native GUI, sampling and SSH
         run: python -u tools/verify_macos.py --rid ${{ matrix.rid }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macOS-screenshots-${{ matrix.rid }}
+          path: artifacts/runtime/*.png
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:

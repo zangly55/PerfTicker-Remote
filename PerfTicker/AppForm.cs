@@ -1,4 +1,4 @@
-﻿using System.Drawing.Drawing2D;
+using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 
 namespace PerfTicker;
@@ -114,6 +114,7 @@ internal sealed class AppForm : Form
 
     private uint _wakeMsg;
     private bool _hiddenMode;
+    private readonly bool _validationMode;
 
     private const int WM_NCHITTEST = 0x0084;
     private const int WM_MOUSEACTIVATE = 0x0021;
@@ -134,6 +135,9 @@ internal sealed class AppForm : Form
         DoubleBuffered = true;
         try { Icon = Art.MakeAppIcon(); } catch { }
     }
+    // Native rendering checks inject an isolated sampler and never modify the user's preferences or login entry.
+    internal AppForm(Settings settings, IMonitorSampler sampler) : this()
+    { _settings = settings; _sampler = sampler; _validationMode = true; }
 
     protected override CreateParams CreateParams
     {
@@ -165,7 +169,8 @@ internal sealed class AppForm : Form
         float s = DeviceDpi / 96f;
         Theme.Rebuild(s);
 
-        _settings = Settings.Load(out string cfgWarning);
+        string cfgWarning = null;
+        _settings ??= Settings.Load(out cfgWarning);
         St.IntervalMs = _settings.IntervalMs;
         St.PeriodMs = _settings.PeriodMs;
         if (St.PeriodMs < St.IntervalMs * 2L) St.PeriodMs = SmallestPeriodFor(St.IntervalMs);   // 防止 K 线周期细于采样间隔
@@ -177,11 +182,11 @@ internal sealed class AppForm : Form
 
         if (_settings.MonitorMode != MonitorSource.Local && _settings.MonitorMode != MonitorSource.Remote)
             _settings.MonitorMode = File.Exists(RemoteConfig.ConfigPath) ? MonitorSource.Remote : MonitorSource.Local;
-        _sampler = MonitorSource.Create(_settings.MonitorMode, St.IntervalMs);
+        _sampler ??= MonitorSource.Create(_settings.MonitorMode, St.IntervalMs);
         ApplyTheme();
         St.Marquee = _settings.Marquee;
         St.Economy.Restore(_settings.EcoTotal, _settings.EcoPeak, _settings.EcoSeconds);
-        ApplyAutoStart();
+        if (!_validationMode) ApplyAutoStart();
         St.Metrics = Catalog.Build(_sampler.Cores);
         St.CpuName = _sampler.CpuName;
         St.SelectedIndex = Math.Min(St.SelectedIndex, St.Metrics.Count - 1);
@@ -223,7 +228,7 @@ internal sealed class AppForm : Form
         if (_settings.Maximized) WindowState = FormWindowState.Maximized;
         if (_settings.Gadget) ShowGadget();
 
-        InitTray();
+        if (!_validationMode) InitTray();
         if (!string.IsNullOrEmpty(cfgWarning)) AddTape("配置提示 · " + cfgWarning, Theme.Warn);
         _timer = new System.Windows.Forms.Timer { Interval = 33 };
         _timer.Tick += OnUiTick;
@@ -257,7 +262,7 @@ internal sealed class AppForm : Form
     {
         try
         {
-            if (_settings == null) return;
+            if (_settings == null || _validationMode) return;
             bool max = WindowState == FormWindowState.Maximized;
             _settings.Maximized = max;
             if (!max && Visible)
@@ -562,6 +567,7 @@ internal sealed class AppForm : Form
         if (W < Theme.Px(1420)) rightW = Theme.Px(300);
         int centerW = W - leftW - rightW;
         if (centerW < Theme.Px(420)) { rightW = Math.Max(Theme.Px(250), W - leftW - Theme.Px(420)); }
+        centerW = W - leftW - rightW;
 
         int y0 = titleH + indexH;
         int footerY = H - footerH;

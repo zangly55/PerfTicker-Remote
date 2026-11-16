@@ -3,6 +3,8 @@ using System.Net.Sockets;
 using System.Text.Json;
 using PerfTicker;
 
+if (args.Contains("--gui")) { Environment.ExitCode = WindowsGuiChecks.Run(); return; }
+
 int passed = 0;
 void Check(bool condition, string name)
 {

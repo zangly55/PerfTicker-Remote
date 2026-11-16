@@ -1,4 +1,4 @@
-﻿using System.Drawing.Drawing2D;
+using System.Drawing.Drawing2D;
 
 namespace PerfTicker;
 
@@ -290,10 +290,10 @@ internal sealed class FooterPanel : Panel
         if (total > 8 && marqueeRight - mqLeft > P(60))
         {
             using (var lg = new LinearGradientBrush(new RectangleF(mqLeft, 0, P(22), Hp),
-                       Color.FromArgb(255, 0x0E, 0x12, 0x19), Color.FromArgb(0, 0x0E, 0x12, 0x19), 0f))
+                       Color.FromArgb(255, Theme.MarqueeFade), Color.FromArgb(0, Theme.MarqueeFade), 0f))
                 g.FillRectangle(lg, new RectangleF(mqLeft, 0, P(22), Hp));
             using (var lg = new LinearGradientBrush(new RectangleF(marqueeRight - P(22), 0, P(22), Hp),
-                       Color.FromArgb(0, 0x0E, 0x12, 0x19), Color.FromArgb(255, 0x0E, 0x12, 0x19), 0f))
+                       Color.FromArgb(0, Theme.MarqueeFade), Color.FromArgb(255, Theme.MarqueeFade), 0f))
                 g.FillRectangle(lg, new RectangleF(marqueeRight - P(22), 0, P(22), Hp));
         }
 

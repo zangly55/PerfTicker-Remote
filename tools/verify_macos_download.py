@@ -20,6 +20,19 @@ def checked(command, **kwargs):
     return subprocess.run(command, text=True, check=True, timeout=90, **kwargs)
 
 
+def loaded_libraries(load_commands):
+    """Read load commands, excluding a dylib's own LC_ID_DYLIB install name."""
+    command = ""
+    for line in load_commands.splitlines():
+        fields = line.strip().split(maxsplit=1)
+        if len(fields) != 2:
+            continue
+        if fields[0] == "cmd":
+            command = fields[1]
+        elif fields[0] == "name" and command in {"LC_LOAD_DYLIB", "LC_LOAD_WEAK_DYLIB", "LC_REEXPORT_DYLIB", "LC_LOAD_UPWARD_DYLIB"}:
+            yield fields[1].split(" (offset", 1)[0]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rid", required=True)
@@ -47,13 +60,8 @@ def main():
         assert executable.is_file() and os.access(executable, os.X_OK)
         native = [executable, *app.rglob("*.dylib")]
         for library in native:
-            links = checked(["/usr/bin/otool", "-L", str(library)], capture_output=True).stdout.splitlines()[1:]
-            for line in links:
-                # Universal binaries repeat an unindented file/architecture
-                # header. Only indented lines are dependency entries.
-                if not line.startswith(("\t", " ")):
-                    continue
-                dependency = line.strip().split(" (", 1)[0]
+            commands = checked(["/usr/bin/otool", "-l", str(library)], capture_output=True).stdout
+            for dependency in loaded_libraries(commands):
                 assert not dependency.startswith("/") or dependency.startswith(("/usr/lib/", "/System/Library/")), f"Non-system dependency: {dependency}"
         environment = {k: v for k, v in os.environ.items() if not k.startswith(("DOTNET_", "DYLD_", "NUGET_"))}
         environment.update(PATH="/usr/bin:/bin:/usr/sbin:/sbin", DOTNET_ROOT=str(scratch / "no-dotnet"),

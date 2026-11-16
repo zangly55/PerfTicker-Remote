@@ -50,7 +50,7 @@ internal static class MarketStyle
             Application.Current.Resources[name] = Line;
     }
     public static TextBlock Label(string text, double size = 12, IBrush color = null) => new()
-    { Text = text, FontSize = size, Foreground = color ?? Text, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+    { Text = text, FontSize = size, FontFamily = new FontFamily(Fonts), Foreground = color ?? Text, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     public static string N(double value, string format = "F1") => double.IsFinite(value) ? value.ToString(format, CultureInfo.InvariantCulture) : "—";
     public static Border Box(Control child, Thickness? padding = null) => new()
     { Background = Panel, BorderBrush = Line, BorderThickness = new Thickness(1), Padding = padding ?? new Thickness(12), Child = child };
