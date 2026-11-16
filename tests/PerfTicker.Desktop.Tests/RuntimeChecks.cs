@@ -57,7 +57,7 @@ internal static class RuntimeChecks
                 string output = Environment.GetEnvironmentVariable("PERFTICKER_TEST_OUTPUT") ?? "artifacts/runtime";
                 Directory.CreateDirectory(output);
                 using var bitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height));
-                bitmap.Render(window); bitmap.Save(Path.Combine(output, "macos-window.png"));
+                bitmap.Render(window); bitmap.Save(Path.Combine(output, "macos-window.png"), PngBitmapEncoderOptions.Default);
                 Check(new FileInfo(Path.Combine(output, "macos-window.png")).Length > 10000, "window screenshot rendered after resize");
                 exit = 0;
             }

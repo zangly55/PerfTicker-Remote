@@ -85,6 +85,13 @@ def main():
                 info.mode = 0o755 if info.isdir() or info.name.endswith("/PerfTickerDesktop") or info.name.endswith((".so", ".dylib")) else 0o644
                 return info
             archive.add(staging, arcname=name, filter=mode)
+    elif family == "macOS" and sys.platform == "darwin":
+        bundle = output / (name + ".zip")
+        # codesign stores signatures for managed DLLs in extended attributes.
+        # Python zipfile drops them: a bundle that verifies before archiving then
+        # fails after extraction. AppleDouble entries preserve those signatures.
+        subprocess.run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
+                        str(staging), str(bundle)], check=True)
     else:
         bundle = output / (name + ".zip")
         with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as archive:
