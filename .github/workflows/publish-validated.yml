@@ -1,0 +1,74 @@
+name: Publish validated desktop packages
+
+on:
+  push:
+    tags: ['v1.7.0']
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require successful main-branch validation of this exact tag commit
+        id: validated
+        shell: bash
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/macos-runtime.yml/runs?event=push&status=success&per_page=100" > "$RUNNER_TEMP/validation-runs.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          runs = json.loads((Path(os.environ['RUNNER_TEMP']) / 'validation-runs.json').read_text())['workflow_runs']
+          run = next(r for r in runs if r['head_sha'] == os.environ['GITHUB_SHA'] and r['head_branch'] == 'main')
+          assert run['conclusion'] == 'success' and run['status'] == 'completed'
+          assert run['head_repository']['full_name'] == os.environ['GITHUB_REPOSITORY']
+          assert run['workflow_id'] == 419963853
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f"run_id={run['id']}\n")
+          notes = Path('docs/RELEASE_NOTES.md').read_text()
+          notes += f"\n\n最终安装包来源：[{run['id']}]({run['html_url']})，源码提交 `{run['head_sha']}`。\n"
+          Path(os.environ['RUNNER_TEMP'], 'release-notes.md').write_text(notes)
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: macOS-validation-osx-arm64
+          path: release-assets/arm64
+          run-id: ${{ steps.validated.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: macOS-validation-osx-x64
+          path: release-assets/intel
+          run-id: ${{ steps.validated.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: Windows-validation
+          path: release-assets/windows
+          run-id: ${{ steps.validated.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify package hashes and publish the tested bytes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          root = Path('release-assets')
+          for rid in ('osx-arm64', 'osx-x64', 'win-x64'):
+              matches = list(root.rglob(f'PerfTicker-1.7.0-{rid}.zip'))
+              assert len(matches) == 1, rid
+              package = matches[0]
+              expected = package.with_suffix('.zip.sha256').read_text().split()[0]
+              assert hashlib.sha256(package.read_bytes()).hexdigest() == expected, rid
+          PY
+          mapfile -d '' packages < <(find release-assets -type f \( -name 'PerfTicker-1.7.0-*.zip' -o -name 'PerfTicker-1.7.0-*.zip.sha256' \) -print0)
+          test "${#packages[@]}" -eq 6
+          gh release create "$GITHUB_REF_NAME" "${packages[@]}" --verify-tag --title 'PerfTicker 1.7.0 · Mac 与 Windows' --notes-file "$RUNNER_TEMP/release-notes.md"

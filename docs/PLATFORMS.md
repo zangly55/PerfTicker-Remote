@@ -1,11 +1,11 @@
 # PerfTicker 1.7 · Windows / Linux / macOS 三个版本
 
 三个版本分别打包，保留深色行情、红涨绿跌、独立 GPU 品种、K 线、进程排行，以及本机 / SSH 服务器选择。
-Windows 延续原有 WinForms 客户端；Linux 与 macOS 使用 Avalonia 桌面客户端。桌面挂件、壁纸等 Windows 专有功能未迁移到另外两个版本。
+Windows 延续原有 WinForms 客户端；Linux 与 macOS 使用 Avalonia 桌面客户端。Mac 已补齐进程搜索排序、主题、托盘、置顶挂件等交互；Windows 的桌面嵌入壁纸仍是平台专有功能。完整区别见 [逐项对齐表](DESKTOP_PARITY.md)。
 
 ## 下载与选择
 
-在 [构建记录](https://github.com/zangly55/PerfTicker-Remote/actions/workflows/desktop-packages.yml) 中打开最新成功任务，从 **Artifacts** 下载对应系统。下载 Actions 附件需要登录 GitHub；附件保留 30 天，过期后可重新构建。仓库的 Download ZIP 是源码。
+Windows 和 Mac 优先从 [v1.7.0 发布页](https://github.com/zangly55/PerfTicker-Remote/releases/tag/v1.7.0) 下载对应安装包。Linux 从 [构建记录](https://github.com/zangly55/PerfTicker-Remote/actions/workflows/desktop-packages.yml) 的成功任务 **Artifacts** 下载。Actions 附件需要登录 GitHub，保留 30 天。仓库 Download ZIP 和发布页的 Source code 均是源码。
 
 | 版本 | 软件包 | 适用设备 |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ Windows 延续原有 WinForms 客户端；Linux 与 macOS 使用 Avalonia 桌面
 Linux 和 macOS 各自的两种架构属于同一平台版本。可用 `uname -m` 判断：`x86_64` 选 x64，`arm64` / `aarch64` 选 ARM64。
 所有包自带 .NET 运行时，客户端无需安装 Python。软件包附带原始许可、第三方许可、对应源码和 SHA256 校验文件。
 
-**当前验证范围：** 2026-11-16 已在 GitHub 托管的 Intel macOS 15.7.9 与 Apple Silicon macOS 15.8.2 runner 上完成实际启动、本机采集、原生 GUI 和隔离 SSH 传输验证；两种架构均通过 27 项桌面样例检查、9 项采集器测试及运行检查。修复了 Mac ZIP 解压后丢失部分 DLL 签名的问题。详见 [测试报告、下载与边界](MACOS_VALIDATION.md) 和 [复测方法](MACOS_TESTING.md)。Linux 实际运行验收仍待设备就绪；macOS 14、真实远端 GPU 和下载隔离标记下的 Gatekeeper 放行未在本轮验证。
+**当前验证范围：** 2026-11-16 已完成两种 Mac 架构的原生启动、本机采集、GUI、SSH 验证，同一 ZIP 又在 macOS 15/26 的四台独立 runner 上重新下载并启动。Windows 原生界面和打包也通过检查。36 项桌面样例、11 项 Python 检查通过，修复了 Mac ZIP 丢失签名元数据的问题。详见 [测试报告、下载与边界](MACOS_VALIDATION.md) 和 [复测方法](MACOS_TESTING.md)。Linux 实际运行、macOS 14、真实远端 GPU 准确性和系统设置首次人工放行未被本轮自动化覆盖。
 
 ## Windows 版
 

@@ -2,7 +2,7 @@
 
 **1.7 新增 Linux 与 macOS 独立桌面版**，Windows 保留原生客户端。三端提供行情界面、K 线、多 GPU、SSH 配置发现/手动 IP，以及本机 / 服务器选择。Mac 支持 Apple Silicon 与 Intel，Linux 提供 x64 与 ARM64 包。
 
-下载、各平台启动方式、Mac 传感器限制与虚拟机验收步骤见 **[三平台使用说明](docs/PLATFORMS.md)**。常规安装包在 [GitHub Actions 构建附件](https://github.com/zangly55/PerfTicker-Remote/actions/workflows/desktop-packages.yml)。macOS 已在 Intel 与 Apple Silicon 的 macOS 15 runner 上通过解压包启动、本机采样、原生界面和 SSH 传输检查，修复了 ZIP 丢失签名元数据的问题；见 [测试报告及已验证安装包](docs/MACOS_VALIDATION.md)。Linux 实际运行验收仍待相应设备就绪。
+Windows 与 Mac 安装包见 **[v1.7.0 发布页](https://github.com/zangly55/PerfTicker-Remote/releases/tag/v1.7.0)**。两端已统一精修控件和配色，Mac 补齐进程搜索排序、主题、托盘、挂件、设置等交互；详见 [逐项对齐表](docs/DESKTOP_PARITY.md)。Mac 已通过 Intel/Apple Silicon 原生运行与 macOS 15/26 四组重新下载后的独立启动，首次仍需在系统设置单独允许。见 [测试报告](docs/MACOS_VALIDATION.md) 和 [三平台使用说明](docs/PLATFORMS.md)。Linux 安装包保留在 [构建附件](https://github.com/zangly55/PerfTicker-Remote/actions/workflows/desktop-packages.yml)，实际运行验收仍待设备就绪。
 
 以下为 Windows 版及共用 SSH 功能介绍：
 
@@ -51,7 +51,7 @@
 
 | 版本 | 说明 |
 | --- | --- |
-| [**PerfTicker.exe v1.2.0**](https://github.com/QiuSui1145/PerfTicker/releases/latest) | Windows x64 单文件（约 47 MB），自包含运行时，双击即用 |
+| [**PerfTicker Remote v1.7.0**](https://github.com/zangly55/PerfTicker-Remote/releases/tag/v1.7.0) | Windows x64 / Apple Silicon Mac / Intel Mac；选择对应 ZIP，自包含运行时 |
 
 ---
 
