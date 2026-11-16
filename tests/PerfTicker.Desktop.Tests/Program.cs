@@ -1,6 +1,9 @@
 using PerfTicker;
 using System.Text.Json;
 
+if (args.Contains("--gui")) return RuntimeChecks.Gui();
+if (args.Contains("--ssh")) return await RuntimeChecks.Ssh();
+
 // Fixture-only checks: never start a sampler, GUI, nvidia-smi or SSH connection.
 int passed = 0;
 void Check(bool value, string name) { if (!value) throw new Exception(name); passed++; Console.WriteLine("PASS " + name); }
@@ -39,3 +42,4 @@ Check(discovered.Single().KeyPath == Path.Combine("/home/demo", ".ssh/id_ed25519
 var m = new Metric(); m.Push(20, 1000, 1); m.Push(30, 2000, 1); m.Push(double.NaN, 3000, 1); m.RebuildCandles(5000);
 Check(m.Candles.Count == 1 && m.Candles[0].C == 30 && !m.Available, "missing sensor keeps history without fake zero candle");
 Console.WriteLine($"{passed} fixture checks passed; no hardware sampling or network connections performed.");
+return 0;
