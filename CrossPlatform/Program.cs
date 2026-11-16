@@ -38,7 +38,9 @@ public sealed class DesktopApp : Application
     public override void Initialize()
     {
         Name = "PerfTicker";
-        RequestedThemeVariant = ThemeVariant.Dark;
+        // Windows choose their saved appearance; Default must reach the OS
+        // so the "follow system" option is not trapped under an app-wide Dark.
+        RequestedThemeVariant = ThemeVariant.Default;
         Styles.Add(new FluentTheme());
         MarketStyle.Install(Styles);
     }

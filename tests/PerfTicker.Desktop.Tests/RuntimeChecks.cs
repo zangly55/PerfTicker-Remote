@@ -104,6 +104,10 @@ internal static class RuntimeChecks
                 Check(!MarketStyle.Dark, "light palette follows appearance setting");
                 using var light = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height));
                 light.Render(window); light.Save(Path.Combine(output, "macos-window-light.png"), PngBitmapEncoderOptions.Default);
+                window.SetTheme(2);
+                await Task.Delay(200);
+                Check(builder.Instance.RequestedThemeVariant == Avalonia.Styling.ThemeVariant.Default && window.ActualThemeVariant == builder.Instance.ActualThemeVariant,
+                    "follow-system appearance inherits the OS instead of a forced dark application");
                 window.SetTheme(0);
                 window.Close();
                 var saved = DesktopSettings.Load();
