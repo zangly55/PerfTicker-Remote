@@ -1,4 +1,4 @@
-﻿using System.Drawing.Drawing2D;
+using System.Drawing.Drawing2D;
 
 namespace PerfTicker;
 
@@ -53,9 +53,9 @@ internal abstract class Panel
 
     protected void Chip(Graphics g, Rectangle r, string text, bool active, bool hover, Color accent, Font font = null)
     {
-        var fill = active ? Color.FromArgb(38, accent) : hover ? Theme.PanelSoft : Theme.ChipBg;
-        var border = active ? Color.FromArgb(150, accent) : hover ? Theme.Line2 : Theme.Line2;
-        Theme.RoundedRect(g, r, 3.5f, fill, border, 1f);
+        var fill = active ? Color.FromArgb(18, accent) : hover ? Theme.RowHover : Theme.Panel;
+        var border = active ? Color.FromArgb(100, accent) : Theme.Line2;
+        Theme.RoundedRect(g, r, 3f, fill, border, 1f);
         var c = active ? accent : hover ? Theme.TextHi : Theme.TextDim;
         Theme.Text(g, text, font ?? Theme.UiS, c, r, Theme.AC);
     }
@@ -91,7 +91,7 @@ internal sealed class TitleBarPanel : Panel
             Segs[i] = Rc(x - 44 * (Segs.Length - i), 10, 42, 23);
         }
         x -= 44 * Segs.Length + 8;
-        Pill = Rc(236, 11, 132, 21);
+        Pill = Rc(206, 11, Math.Min(132, Segs[0].X / Theme.S - 254), 21);
         Gear = Rc(150, 8, 26, 26);
     }
 
@@ -167,7 +167,7 @@ internal sealed class TitleBarPanel : Panel
         }
         using (var b = new SolidBrush(dotC)) g.FillEllipse(b, dotX, dotY, dotR, dotR);
         string pillTxt = St.Paused ? "行情已暂停" : live ? $"{F.SourceLabel}行情 {St.IntervalMs / 1000.0:0.0}s" : F.RemoteStatus;
-        Theme.Text(g, pillTxt, Theme.UiXS, live ? Color.FromArgb(0x7E, 0xE0, 0xC0) : Theme.Warn,
+        Theme.Text(g, pillTxt, Theme.UiXS, live ? Theme.Down : Theme.Warn,
             new Rectangle(dotX + P(10), Pill.Y, Pill.Width - P(20), Pill.Height), Theme.AL);
 
         // ── 采样周期分段器 ──
@@ -519,7 +519,7 @@ internal sealed class WatchPanel : Panel
         // 名称
         Theme.TextEllipsis(g, m.Name, selected ? Theme.UiM : Theme.UiS,
             selected ? Theme.TextHi : Theme.TxtHi2,
-            new Rectangle(rr.X + P(62), rr.Y, P(96), rr.Height), Theme.AL);
+            new Rectangle(rr.X + P(62), rr.Y, P(Math.Max(40, w - 238)), rr.Height), Theme.AL);
         // 走势
         var spark = new Rectangle(Bounds.Width - P(168), rr.Y + P(5), P(46), P(14));
         Theme.MiniCandles(g, spark, m.Spark(28), 8);
@@ -630,26 +630,26 @@ internal sealed class InstrumentPanel : Panel
         var m = St.Selected;
         Theme.Fill(g, new Rectangle(0, 0, Bounds.Width, Bounds.Height), Theme.HeadBot2);
 
-        // 第一行：名称 + 代码 + 周期切换
-        Theme.Text(g, m.Name, Theme.UiXL, Theme.TextHi, Rc(14, 9, 260, 22), Theme.AL);
-        int nw = Theme.Measure(g, m.Name, Theme.UiXL);
+        // Compact period controls leave room for long GPU names.
+        float tw = 40, gap = 2;
+        float totalW = 5 * tw + 4 * gap;
+        float tx = w - totalW - 14;
+        int nameWidth = Math.Max(P(75), P(tx - 100));
+        Theme.TextEllipsis(g, m.Name, Theme.UiXL, Theme.TextHi, new Rectangle(P(14), P(9), nameWidth, P(22)), Theme.AL);
+        int nw = Math.Min(nameWidth, Theme.Measure(g, m.Name, Theme.UiXL));
         Theme.Text(g, m.Code, Theme.MockMono, Theme.GoldDim, new Rectangle(P(20) + nw, P(9), P(70), P(22)), Theme.AL);
         string tag = m.Group == "指数" ? "大盘" : m.Group;
         var tagR = new Rectangle(P(24) + nw + P(44), P(12), P(38), P(16));
-        Theme.RoundedRect(g, tagR, 2f, Color.FromArgb(24, 0xF2, 0xC1, 0x4E), Color.FromArgb(70, 0xF2, 0xC1, 0x4E), 1f);
-        Theme.Text(g, tag, Theme.UiXS, Theme.Gold, tagR, Theme.AC);
+        if (tagR.Right + P(12) < P(tx)) Theme.Text(g, tag, Theme.UiXS, Theme.GoldDim, tagR, Theme.AC);
 
         // 周期切换（右侧）
-        float tw = 64, gap = 5;
-        float totalW = 5 * tw + 4 * gap;
-        float tx = w - totalW - P(14) / Theme.S;
         for (int i = 0; i < 5; i++)
         {
-            Tabs[i] = Rc(tx + i * (tw + gap), 10, tw, 23);
+            Tabs[i] = Rc(tx + i * (tw + gap), 10, tw, 22);
             bool enabled = TabPeriods[i] >= St.IntervalMs * 2L;
             bool act = St.PeriodMs == TabPeriods[i];
-            var fill = act ? Color.FromArgb(36, 0xF2, 0xC1, 0x4E) : _hover == i ? Theme.PanelSoft : Theme.ChipBg;
-            Theme.RoundedRect(g, Tabs[i], 3f, fill, act ? Color.FromArgb(140, 0xF2, 0xC1, 0x4E) : Theme.Line2, 1f);
+            if (_hover == i && enabled) Theme.RoundedFill(g, Tabs[i], 2f, Theme.RowHover);
+            if (act) Theme.HLine(g, Tabs[i].X + P(5), Tabs[i].Right - P(5), Tabs[i].Bottom - 1, Theme.Gold);
             Theme.Text(g, TabLabels[i], Theme.UiXS,
                 act ? Theme.Gold : !enabled ? Theme.TextFade : _hover == i ? Theme.TextHi : Theme.TextDim, Tabs[i], Theme.AC);
         }
@@ -680,11 +680,12 @@ internal sealed class InstrumentPanel : Panel
             ("振幅", (m.Open != 0 ? (m.High - m.Low) / Math.Abs(m.Open) * 100 : 0).ToString("0.00") + "%"),
         };
         float sx = 14;
+        float statWidth = (w - 28) / stats.Length;
         foreach (var (label, val) in stats)
         {
             Theme.Text(g, label, Theme.UiXS, Theme.TextFade, Rc(sx, 74, 34, 16), Theme.AL);
-            Theme.Text(g, m.Count > 0 ? val : "—", Theme.NumXS, Theme.Txt, Rc(sx + 30, 74, 72, 16), Theme.AL);
-            sx += 104;
+            Theme.TextEllipsis(g, m.Count > 0 ? val : "—", Theme.NumXS, Theme.Txt, Rc(sx + 30, 74, Math.Max(24, statWidth - 34), 16), Theme.AL);
+            sx += statWidth;
         }
 
         using (var pen = new Pen(Theme.Line2)) g.DrawLine(pen, 0, Bounds.Height - 1, Bounds.Width, Bounds.Height - 1);

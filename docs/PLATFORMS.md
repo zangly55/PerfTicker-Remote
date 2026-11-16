@@ -1,11 +1,11 @@
 # PerfTicker 1.7 · Windows / Linux / macOS 三个版本
 
 三个版本分别打包，保留深色行情、红涨绿跌、独立 GPU 品种、K 线、进程排行，以及本机 / SSH 服务器选择。
-Windows 延续原有 WinForms 客户端；Linux 与 macOS 使用 Avalonia 桌面客户端。桌面挂件、壁纸等 Windows 专有功能未迁移到另外两个版本。
+Windows 延续原有 WinForms 客户端；Linux 与 macOS 使用 Avalonia 桌面客户端。Mac 已补齐进程搜索排序、主题、托盘、置顶挂件等交互；Windows 的桌面嵌入壁纸仍是平台专有功能。完整区别见 [逐项对齐表](DESKTOP_PARITY.md)。
 
 ## 下载与选择
 
-在 [构建记录](https://github.com/zangly55/PerfTicker-Remote/actions/workflows/desktop-packages.yml) 中打开最新成功任务，从 **Artifacts** 下载对应系统。下载 Actions 附件需要登录 GitHub；附件保留 30 天，过期后可重新构建。仓库的 Download ZIP 是源码。
+Windows 和 Mac 优先从 [v1.7.0 发布页](https://github.com/zangly55/PerfTicker-Remote/releases/tag/v1.7.0) 下载对应安装包。Linux 从 [构建记录](https://github.com/zangly55/PerfTicker-Remote/actions/workflows/desktop-packages.yml) 的成功任务 **Artifacts** 下载。Actions 附件需要登录 GitHub，保留 30 天。仓库 Download ZIP 和发布页的 Source code 均是源码。
 
 | 版本 | 软件包 | 适用设备 |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ Windows 延续原有 WinForms 客户端；Linux 与 macOS 使用 Avalonia 桌面
 Linux 和 macOS 各自的两种架构属于同一平台版本。可用 `uname -m` 判断：`x86_64` 选 x64，`arm64` / `aarch64` 选 ARM64。
 所有包自带 .NET 运行时，客户端无需安装 Python。软件包附带原始许可、第三方许可、对应源码和 SHA256 校验文件。
 
-**当前验证范围：** 已完成跨平台编译、行情界面布局检查及 27 项纯样例测试，涵盖 1/4/8/32 卡、UUID 归属、Mac 内存页解析和密码不落盘。按用户要求暂停本机运行，macOS/Linux 的实际采集和启动验收留待虚拟机或相应设备就绪。构建成功不等于各系统实机验证完成。
+**当前验证范围：** 2026-11-16 已完成两种 Mac 架构的原生启动、本机采集、GUI、SSH 验证，同一 ZIP 又在 macOS 15/26 的四台独立 runner 上重新下载并启动。Windows 原生界面和打包也通过检查。36 项桌面样例、11 项 Python 检查通过，修复了 Mac ZIP 丢失签名元数据的问题。详见 [测试报告、下载与边界](MACOS_VALIDATION.md) 和 [复测方法](MACOS_TESTING.md)。Linux 实际运行、macOS 14、真实远端 GPU 准确性和系统设置首次人工放行未被本轮自动化覆盖。
 
 ## Windows 版
 
@@ -44,6 +44,7 @@ ARM64 替换为对应包名。保持整个解压目录完整，不能只复制�
 ## macOS 版
 
 目标为 macOS 14 及更新系统。按 Mac 芯片选择软件包，解压后将 `PerfTicker.app` 拖入“应用程序”，再打开。
+请使用 macOS 自带“归档实用工具”（双击 ZIP）或 `ditto -x -k 软件包.zip 解压目录`，以保留包内的签名扩展属性；避免先在其他系统解压再复制 `.app`。
 该开源构建没有 Apple Developer ID 公证；GitHub 的 Mac 构建会做本地 ad-hoc 签名，Windows 交叉构建不会生成整个应用包的 Mac 签名。如果 macOS 拒绝打开，请先核对来源和 SHA256，再按系统“隐私与安全性”对这个应用单独处理，或在 Mac 从源码构建。无需关闭系统整体安全保护。
 
 Mac 本机支持 CPU 总负载、内存估算、网络吞吐和进程排行，并识别 Apple / AMD GPU 型号。以下读数当前显示 `—`：GPU 负载、显存、频率、温度、功耗、风扇，以及 CPU 实时频率、磁盘吞吐。Apple 统一内存不会伪装成独立显存。内存估算将 free / inactive / speculative 页视作可回收，与活动监视器“内存使用”的定义可能不同。
@@ -65,7 +66,7 @@ Linux/Mac 仅保存地址、用户名、私钥路径和主机指纹，密码/私
 
 ## 虚拟机验收
 
-等虚拟机准备好再执行这些步骤，构建流程不会自动启动监控程序。
+常规三平台打包流程只构建；单独的 `macOS runtime validation` 流程会在临时 Mac runner 上实际启动应用、采样和运行隔离 SSH 测试。个人设备或 Linux 虚拟机可按以下步骤继续验收。
 
 - Linux VM 需安装桌面环境，若仅 SSH 登录，改在宿主机使用客户端连接这台 VM。
 - 虚拟机没有直通物理显卡时，本机模式只会看到虚拟机可见的设备；这不影响它通过 SSH 查看服务器的四张或更多 NVIDIA GPU。

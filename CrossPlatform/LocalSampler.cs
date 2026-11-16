@@ -58,6 +58,7 @@ internal sealed class LocalReader : IDisposable
     private Dictionary<string, (double read, double write, double busy)> _disks = new();
     private double _time;
     private string _cpuName;
+    private double _macMemoryTotal;
     private List<GpuInfo> _macCards;
     private uint _machHost;
     private static double Number(string s) => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && double.IsFinite(v) ? v : double.NaN;
@@ -176,7 +177,8 @@ internal sealed class LocalReader : IDisposable
         if (host_statistics(_machHost, 3, ticks, ref count) != 0) throw new IOException("macOS CPU 计数器不可用");
         s.CpuPct = CpuDelta("cpu", ticks.Sum(v => (double)v), ticks[2]);
         _cpuName ??= Command("/usr/sbin/sysctl", 3000, "-n", "machdep.cpu.brand_string").Trim();
-        s.MemTotalGB = Number(Command("/usr/sbin/sysctl", 3000, "-n", "hw.memsize").Trim()) / 1073741824;
+        if (_macMemoryTotal <= 0) _macMemoryTotal = Number(Command("/usr/sbin/sysctl", 3000, "-n", "hw.memsize").Trim()) / 1073741824;
+        s.MemTotalGB = _macMemoryTotal;
         s.MemUsedGB = MacMemoryUsed(Command("/usr/bin/vm_stat", 3000), s.MemTotalGB * 1073741824) / 1073741824;
         s.MemPct = s.MemUsedGB / s.MemTotalGB * 100;
         s.UptimeSeconds = Environment.TickCount64 / 1000.0;

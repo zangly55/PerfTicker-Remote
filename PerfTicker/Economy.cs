@@ -1,4 +1,4 @@
-﻿namespace PerfTicker;
+namespace PerfTicker;
 
 /// <summary>经济系统中的一个「经营单元」：某项占用率对应的产能与盈亏。</summary>
 internal sealed class EcoPart
@@ -84,10 +84,13 @@ internal sealed class Economy
         return gross * penalty - cost;
     }
 
+    public static bool CanAccrue(Snapshot s) => double.IsFinite(s.CpuPct) && double.IsFinite(s.Gpu.UtilPct)
+        && double.IsFinite(s.MemPct) && double.IsFinite(s.DiskReadMBps) && double.IsFinite(s.DiskWriteMBps)
+        && double.IsFinite(s.NetRxMBps) && double.IsFinite(s.NetTxMBps);
+
     public void Accrue(double dt, Snapshot s)
     {
-        if (!Enabled || dt <= 0 || !double.IsFinite(s.CpuPct) || !double.IsFinite(s.Gpu.UtilPct)
-            || !double.IsFinite(s.MemPct)) return;
+        if (!Enabled || !double.IsFinite(dt) || dt <= 0 || !CanAccrue(s)) return;
         if (dt > 0.5) dt = 0.5;   // 防止长时间挂起后一次性灌入大量营收
 
         Seconds += dt;

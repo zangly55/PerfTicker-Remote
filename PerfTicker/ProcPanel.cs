@@ -1,4 +1,4 @@
-﻿using System.Drawing.Drawing2D;
+using System.Drawing.Drawing2D;
 
 namespace PerfTicker;
 
@@ -40,7 +40,8 @@ internal sealed class ProcPanel : Panel
         float gpu = mem - 78 - 10;
         float chg = gpu - 58 - 8;
         float cpu = chg - 54 - 8;
-        return (cpu, chg, gpu, mem, thr, hnd, spark);
+        // Paint uses device pixels; scale once here, including fractional DPI.
+        return (P(cpu), P(chg), P(gpu), P(mem), P(thr), P(hnd), P(spark));
     }
 
     private List<ProcSample> _viewCache;

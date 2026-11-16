@@ -37,8 +37,10 @@ public sealed class DesktopApp : Application
 {
     public override void Initialize()
     {
+        Name = "PerfTicker";
         RequestedThemeVariant = ThemeVariant.Dark;
         Styles.Add(new FluentTheme());
+        MarketStyle.Install(Styles);
     }
     public override void OnFrameworkInitializationCompleted()
     {

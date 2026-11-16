@@ -1,6 +1,9 @@
 using PerfTicker;
 using System.Text.Json;
 
+if (args.Contains("--gui")) return RuntimeChecks.Gui();
+if (args.Contains("--ssh")) return await RuntimeChecks.Ssh();
+
 // Fixture-only checks: never start a sampler, GUI, nvidia-smi or SSH connection.
 int passed = 0;
 void Check(bool value, string name) { if (!value) throw new Exception(name); passed++; Console.WriteLine("PASS " + name); }
@@ -38,4 +41,26 @@ var discovered = SshDiscovery.Parse("Host test\n HostName 192.0.2.1\n User demo\
 Check(discovered.Single().KeyPath == Path.Combine("/home/demo", ".ssh/id_ed25519"), "Unix SSH identity expands home");
 var m = new Metric(); m.Push(20, 1000, 1); m.Push(30, 2000, 1); m.Push(double.NaN, 3000, 1); m.RebuildCandles(5000);
 Check(m.Candles.Count == 1 && m.Candles[0].C == 30 && !m.Available, "missing sensor keeps history without fake zero candle");
+var preferences = new DesktopSettings { IntervalMs = 10000, PeriodMs = 2000, Width = double.NaN, Pinned = null };
+preferences.Normalize();
+Check(preferences.PeriodMs == 30000 && double.IsFinite(preferences.Width) && preferences.Pinned.Length == 0, "settings recover invalid data and reject undersampled candles");
+var processRows = new[] {
+    new ProcessRow { Sample = new ProcSample { Pid = 21, Name = "Python", CpuPct = 30, GpuMemMB = double.NaN } },
+    new ProcessRow { Sample = new ProcSample { Pid = 22, Name = "worker", CpuPct = 10, GpuMemMB = 20 }, Pinned = true },
+    new ProcessRow { Sample = new ProcSample { Pid = 23, Name = "python3", CpuPct = 40, GpuMemMB = 30 } } };
+Check(DesktopQueries.Processes(processRows, "PYTHON", 0, true, "").Select(p => p.Sample.Pid).SequenceEqual(new[] { 23, 21 }), "process search is case insensitive and keeps CPU ordering");
+Check(DesktopQueries.Processes(processRows, "22", 0, true, "").Single().Sample.Pid == 22, "process search matches PID");
+Check(DesktopQueries.Processes(processRows, "", 1, false, "").Last().Sample.Pid == 21, "unknown GPU readings stay last when sorting ascending");
+Check(DesktopQueries.Processes(processRows, "", 0, true, "").First().Sample.Pid == 22, "pinned process stays first");
+var economy = new Economy { Enabled = true }; var hardware = new Hardware();
+var ecoSnapshot = new Snapshot { CoreMHz = new double[16], MemTotalGB = 32, CpuPct = 50, MemPct = 50, Gpu = new GpuInfo { Available = true, UtilPct = 50, MemTotalMB = 8192 } };
+hardware.Apply(ecoSnapshot); economy.ApplyWeights(hardware); economy.Accrue(.25, ecoSnapshot);
+Check(double.IsFinite(economy.Total) && economy.Seconds == .25, "shared Windows simulation runs on portable snapshot weights");
+double total = economy.Total; ecoSnapshot.Gpu.UtilPct = double.NaN; economy.Accrue(.25, ecoSnapshot);
+Check(economy.Total == total && economy.Seconds == .25, "missing Mac GPU does not fabricate simulated earnings");
+ecoSnapshot.Gpu.UtilPct = 50; ecoSnapshot.DiskReadMBps = double.NaN; economy.Accrue(.25, ecoSnapshot);
+Check(economy.Total == total && double.IsFinite(economy.Total), "unavailable disk cannot poison the shared earnings ledger");
+var loginXml = System.Xml.Linq.XDocument.Parse(MacAutoStart.Plist("/Applications/A & B.app/Contents/MacOS/PerfTickerDesktop"));
+Check(loginXml.Descendants("array").Single().Element("string").Value.Contains("A & B.app"), "Mac login configuration safely preserves spaces and XML characters");
 Console.WriteLine($"{passed} fixture checks passed; no hardware sampling or network connections performed.");
+return 0;

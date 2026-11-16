@@ -21,7 +21,8 @@ internal sealed class ConnectionWindow : Window
         Title = "连接 Linux 服务器 · PerfTicker"; Width = 660; Height = 760; MinWidth = 570; MinHeight = 600;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = MarketStyle.Background; Foreground = MarketStyle.Text;
-        FontFamily = new FontFamily("Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif");
+        FontFamily = new FontFamily(MarketStyle.Fonts);
+        RequestedThemeVariant = MarketStyle.Dark ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light;
         _host.Text = previous.Host; _port.Text = previous.Port.ToString(); _user.Text = previous.User;
         _password.Text = previous.Password; _key.Text = previous.PrivateKeyPath; _passphrase.Text = previous.KeyPassphrase;
         _fingerprint.Text = previous.Fingerprint; _auth.SelectedIndex = previous.AuthMethod == "key" ? 1 : 0;

@@ -1,4 +1,4 @@
-﻿using System.Drawing;
+using System.Drawing;
 
 namespace PerfTicker;
 
@@ -73,15 +73,9 @@ internal sealed class AppState
 
     public void ApplyColorMode()
     {
-        if (RedUp)
-        {
-            Theme.Up = Color.FromArgb(0xFF, 0x4D, 0x4F);
-            Theme.Down = Color.FromArgb(0x00, 0xC0, 0x8B);
-        }
-        else
-        {
-            Theme.Up = Color.FromArgb(0x00, 0xC0, 0x8B);
-            Theme.Down = Color.FromArgb(0xFF, 0x4D, 0x4F);
-        }
+        var red = Theme.Dark ? Color.FromArgb(0xFF, 0x4D, 0x4F) : Color.FromArgb(0xDD, 0x35, 0x38);
+        var green = Theme.Dark ? Color.FromArgb(0x00, 0xC0, 0x8B) : Color.FromArgb(0x08, 0x7E, 0x58);
+        Theme.Up = RedUp ? red : green;
+        Theme.Down = RedUp ? green : red;
     }
 }
