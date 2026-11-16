@@ -16,7 +16,9 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
     <PackageReference Include="SSH.NET" Version="2026.0.0" />
     <Compile Include="../PerfTicker/Snapshot.cs;../PerfTicker/Metrics.cs;../PerfTicker/RemoteSampler.cs;../PerfTicker/SshConnection.cs;../PerfTicker/SshDiscovery.cs;../PerfTicker/Diag.cs" LinkBase="Shared" />
+    <Compile Include="../PerfTicker/Economy.cs" LinkBase="Shared" />
     <EmbeddedResource Include="../remote/collector.py" LogicalName="PerfTicker.collector.py" />
+    <EmbeddedResource Include="../PerfTicker/app.ico" LogicalName="PerfTicker.app.ico" />
     <InternalsVisibleTo Include="PerfTicker.Desktop.Tests" />
   </ItemGroup>
 </Project>

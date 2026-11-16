@@ -49,6 +49,10 @@ def main():
         for library in native:
             links = checked(["/usr/bin/otool", "-L", str(library)], capture_output=True).stdout.splitlines()[1:]
             for line in links:
+                # Universal binaries repeat an unindented file/architecture
+                # header. Only indented lines are dependency entries.
+                if not line.startswith(("\t", " ")):
+                    continue
                 dependency = line.strip().split(" (", 1)[0]
                 assert not dependency.startswith("/") or dependency.startswith(("/usr/lib/", "/System/Library/")), f"Non-system dependency: {dependency}"
         environment = {k: v for k, v in os.environ.items() if not k.startswith(("DOTNET_", "DYLD_", "NUGET_"))}

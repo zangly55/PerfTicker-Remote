@@ -6,6 +6,7 @@ from pathlib import Path
 import plistlib
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import tarfile
@@ -13,6 +14,18 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "1.7.0"
+
+
+def mac_icon(ico: bytes) -> bytes:
+    """Reuse the existing PNG icon without redrawing it or adding dependencies."""
+    count = struct.unpack_from("<H", ico, 4)[0]
+    for i in range(count):
+        width, height, _, _, _, _, size, offset = struct.unpack_from("<BBBBHHII", ico, 6 + 16 * i)
+        png = ico[offset:offset + size]
+        if width == height == 0 and png.startswith(b"\x89PNG\r\n\x1a\n"):
+            element = b"ic08" + struct.pack(">I", len(png) + 8) + png
+            return b"icns" + struct.pack(">I", len(element) + 8) + element
+    raise ValueError("app.ico must contain the existing 256px PNG icon")
 
 
 def main():
@@ -40,8 +53,11 @@ def main():
                 "CFBundleIdentifier": "io.github.zangly55.perfticker", "CFBundleExecutable": "PerfTickerDesktop",
                 "CFBundlePackageType": "APPL", "CFBundleVersion": VERSION,
                 "CFBundleShortVersionString": VERSION, "LSMinimumSystemVersion": "14.0",
-                "NSHighResolutionCapable": True}
+                "NSHighResolutionCapable": True, "CFBundleIconFile": "PerfTicker.icns"}
         (app / "Contents" / "Info.plist").write_bytes(plistlib.dumps(info))
+        resources = app / "Contents" / "Resources"
+        resources.mkdir()
+        (resources / "PerfTicker.icns").write_bytes(mac_icon((ROOT / "PerfTicker" / "app.ico").read_bytes()))
     else:
         target = staging
     for path in source.iterdir():
