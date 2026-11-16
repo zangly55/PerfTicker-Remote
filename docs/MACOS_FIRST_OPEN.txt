@@ -1,0 +1,22 @@
+PerfTicker Mac 版：首次打开
+
+1. 确认芯片：苹果菜单 → 关于本机。
+   Apple M 系列下载 osx-arm64；Intel 处理器下载 osx-x64。
+2. 在 Mac 上双击 ZIP，使用系统自带“归档实用工具”解压。
+3. 将完整的 PerfTicker.app 拖入“应用程序”，再双击打开。
+   客户端自带 .NET，无需另外安装 .NET、Python 或 Homebrew。
+4. 本社区版本未购买 Developer ID 证书，也未进行 Apple 公证。
+   如果系统提示“无法验证开发者”或“Apple 无法检查是否包含恶意软件”：
+   先确认文件来自 zangly55/PerfTicker-Remote，并核对 SHA256 校验值；
+   然后打开 苹果菜单 → 系统设置 → 隐私与安全性，
+   找到 PerfTicker 的阻止提示，选择“仍要打开”，按提示认证并确认“打开”。
+   这是针对该应用的首次授权，不需要关闭 Mac 的整体安全保护。
+5. 如果提示“应用已损坏”，不要忽略：重新下载对应芯片的完整 ZIP，
+   直接在 Mac 上解压。不要先在 Windows 上解压再搬运 .app。
+
+Apple 官方说明：https://support.apple.com/zh-cn/102445
+源码与更新：https://github.com/zangly55/PerfTicker-Remote
+
+本机首次默认显示当前 Mac。连接 Linux 服务器请点“连接设置”，
+核对 SSH 指纹后连接；服务器需要 Python 3，NVIDIA 数据需要 nvidia-smi。
+Mac 暂未支持的传感器显示“—”，不代表应用故障。

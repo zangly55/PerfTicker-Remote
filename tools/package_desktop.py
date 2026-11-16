@@ -58,6 +58,8 @@ def main():
             file.chmod(0o755)
     shutil.copy2(ROOT / "LICENSE", staging / "LICENSE")
     shutil.copy2(ROOT / "docs" / "PLATFORMS.md", staging / "README.md")
+    if family == "macOS":
+        shutil.copy2(ROOT / "docs" / "MACOS_FIRST_OPEN.txt", staging / "首次打开说明.txt")
     shutil.copytree(ROOT / "packaging" / "licenses", staging / "licenses")
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=normal"], cwd=ROOT, text=True).strip()

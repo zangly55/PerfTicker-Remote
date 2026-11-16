@@ -3,7 +3,7 @@ name: macOS runtime validation
 on:
   workflow_dispatch:
   push:
-    branches: [main, codex/macos-runtime-validation]
+    branches: [main]
     paths:
       - 'CrossPlatform/**'
       - 'PerfTicker/**'
@@ -11,6 +11,8 @@ on:
       - 'tests/**'
       - 'tools/package_desktop.py'
       - 'tools/verify_macos.py'
+      - 'tools/verify_macos_download.py'
+      - 'docs/MACOS_FIRST_OPEN.txt'
       - '.github/workflows/macos-runtime.yml'
   pull_request:
     paths:
@@ -65,4 +67,32 @@ jobs:
             artifacts/runtime/*.log
             dist/packages/macOS/*.zip
             dist/packages/macOS/*.sha256
+          retention-days: 30
+
+  download:
+    name: Download (${{ matrix.os }}, ${{ matrix.rid }})
+    needs: macos
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15-intel, rid: osx-x64 }
+          - { os: macos-15, rid: osx-arm64 }
+          - { os: macos-26-intel, rid: osx-x64 }
+          - { os: macos-26, rid: osx-arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: macOS-validation-${{ matrix.rid }}
+          path: artifacts/received
+      - name: Test downloaded app without SDK setup
+        run: python3 -u tools/verify_macos_download.py --rid ${{ matrix.rid }} --input artifacts/received --output artifacts/download-result
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macOS-download-${{ matrix.os }}-${{ matrix.rid }}
+          path: artifacts/download-result/
           retention-days: 30
